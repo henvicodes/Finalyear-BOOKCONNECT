@@ -1,0 +1,225 @@
+.register-container {
+  min-height: 100vh;
+  background: linear-gradient(
+    135deg,
+    var(--primary-bg) 0%,
+    white 50%,
+    #f5f0ff 100%
+  );
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1rem;
+}
+
+.register-card {
+  max-width: 450px;
+  width: 100%;
+  background: var(--bg-primary);
+  padding: 2.5rem;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl);
+  border: 1px solid var(--border-light);
+}
+
+.logo-wrapper {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 2rem;
+}
+
+.logo-icon {
+  background: var(--primary-bg);
+  padding: 1rem;
+  border-radius: var(--radius-full);
+}
+
+.logo-icon svg {
+  width: 2.5rem;
+  height: 2.5rem;
+  color: var(--primary-color);
+}
+
+.register-title {
+  font-size: 1.875rem;
+  font-weight: 700;
+  text-align: center;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+}
+
+.register-subtitle {
+  text-align: center;
+  color: var(--text-secondary);
+  margin-bottom: 2rem;
+}
+
+.register-subtitle a {
+  color: var(--primary-color);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.register-subtitle a:hover {
+  text-decoration: underline;
+}
+
+/* Error Message */
+.error-message {
+  background: #fef2f2;
+  border-left: 4px solid #ef4444;
+  padding: 1rem;
+  border-radius: var(--radius-md);
+  margin-bottom: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.error-message svg {
+  color: #ef4444;
+}
+
+.error-message p {
+  color: #b91c1c;
+  font-size: 0.875rem;
+}
+
+/* Form */
+.register-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.form-group label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.input-wrapper {
+  position: relative;
+}
+
+.input-icon {
+  position: absolute;
+  left: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  z-index: 1;
+}
+
+.input-wrapper input,
+.input-wrapper select {
+  width: 100%;
+  padding: 0.75rem 1rem 0.75rem 2.5rem;
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  transition: all 0.2s ease;
+  background: var(--bg-primary);
+}
+
+.input-wrapper select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 1rem;
+}
+
+.input-wrapper input:focus,
+.input-wrapper select:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px var(--primary-bg);
+}
+
+.input-wrapper input.error,
+.input-wrapper select.error {
+  border-color: #ef4444;
+}
+
+.input-error {
+  color: #ef4444;
+  font-size: 0.75rem;
+  margin-top: 0.25rem;
+}
+
+/* Terms Checkbox */
+.terms-group {
+  margin: 0.5rem 0;
+}
+
+.terms-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.terms-label input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--primary-color);
+}
+
+.terms-label a {
+  color: var(--primary-color);
+  text-decoration: none;
+}
+
+.terms-label a:hover {
+  text-decoration: underline;
+}
+
+/* Submit Button */
+.btn-submit {
+  background: var(--primary-color);
+  color: white;
+  border: none;
+  padding: 0.875rem;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  width: 100%;
+  margin-top: 0.5rem;
+}
+
+.btn-submit:hover:not(:disabled) {
+  background: var(--primary-dark);
+}
+
+.btn-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+  .register-card {
+    padding: 1.5rem;
+  }
+
+  .register-title {
+    font-size: 1.5rem;
+  }
+}

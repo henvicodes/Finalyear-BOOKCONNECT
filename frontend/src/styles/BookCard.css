@@ -1,0 +1,92 @@
+.book-card {
+  display: block;
+  background: var(--bg-secondary);
+  border-radius: 12px;
+  overflow: hidden;
+  text-decoration: none;
+  transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.book-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+}
+
+.book-card-cover {
+  aspect-ratio: 2/3;
+  overflow: hidden;
+  background: var(--bg-tertiary);
+}
+
+.book-card-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.book-card-cover-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(
+    135deg,
+    var(--primary-color) 0%,
+    var(--primary-dark) 100%
+  );
+  color: white;
+}
+
+.book-card-info {
+  padding: 1rem;
+}
+
+.book-card-title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 0.25rem 0;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.book-card-author {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin: 0 0 0.5rem 0;
+}
+
+.book-card-rating {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 0.5rem;
+}
+
+.book-card-rating .star-filled {
+  fill: #fbbf24;
+  color: #fbbf24;
+}
+
+.book-card-rating span {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.book-card-reviews {
+  margin-left: 4px;
+  font-size: 0.75rem;
+}
+
+.book-card-genre {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  text-transform: capitalize;
+}
