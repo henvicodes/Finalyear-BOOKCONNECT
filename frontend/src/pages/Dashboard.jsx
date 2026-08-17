@@ -4,13 +4,15 @@ import { useAuth } from "../context/AuthContext";
 import axios from "axios";
 import {
   BookOpen, Upload, Star, Users, TrendingUp, Shield,
-  Bell, Settings, LogOut, ChevronRight, Eye, Heart,
+  Bell, Settings, LogOut, ChevronRight, Eye, EyeOff, Heart,
   MessageCircle, Award, Zap, Globe, PenTool, Search,
   BarChart2, Clock, CheckCircle, AlertCircle, Plus,
   BookMarked, Layers, DollarSign, UserCheck, FileText,
   Hash, Lock, Sparkles, ArrowUpRight, Menu, X
 } from "lucide-react";
 import SearchBar from "../components/SearchBar";
+import WalletPinModal from "../components/WalletPinModal";
+import { sendMetaMaskTransaction, getConnectedAccount } from "../services/web3";
 import "./Dashboard.css";
 import {
   AuthorOverview,
@@ -63,6 +65,8 @@ const Sidebar = ({ role, active, setActive, onLogout, user, sidebarOpen, setSide
   const links = role === "author" ? authorLinks : role === "publisher" ? publisherLinks : readerLinks;
   const roleColor = role === "author" ? "#7c3aed" : role === "publisher" ? "#0369a1" : "#059669";
   const roleLabel = role === "author" ? "Author" : role === "publisher" ? "Publisher" : "Reader";
+  const [showBalance, setShowBalance] = useState(false);
+  const [pinModalOpen, setPinModalOpen] = useState(false);
 
   return (
     <>
@@ -96,7 +100,7 @@ const Sidebar = ({ role, active, setActive, onLogout, user, sidebarOpen, setSide
             </button>
           ))}
         </nav>
-        {/* Wallet Balance widget */}
+        {/* Wallet Balance widget with PIN protection */}
         <div style={{
           margin: "10px 16px",
           padding: "12px 14px",
@@ -105,16 +109,36 @@ const Sidebar = ({ role, active, setActive, onLogout, user, sidebarOpen, setSide
           borderRadius: 12,
           display: "flex",
           flexDirection: "column",
-          gap: 4
+          gap: 6
         }}>
-          <span style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: "bold" }}>Wallet Balance</span>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: "bold" }}>Wallet Balance</span>
+            <button
+              onClick={() => showBalance ? setShowBalance(false) : setPinModalOpen(true)}
+              style={{ background: "none", border: "none", color: roleColor, cursor: "pointer", padding: 0 }}
+              title={showBalance ? "Hide balance" : "Reveal with PIN"}
+            >
+              {showBalance ? <EyeOff size={14} /> : <Eye size={14} />}
+            </button>
+          </div>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <DollarSign size={14} color={roleColor} />
             <strong style={{ fontSize: 15, color: "#1e293b", fontFamily: "sans-serif" }}>
-              ${user?.walletBalance !== undefined ? user.walletBalance.toFixed(2) : "1,000.00"}
+              {showBalance
+                ? `$${(user?.walletBalance !== undefined ? user.walletBalance : 1000).toFixed(2)}`
+                : "$ ••••••"}
             </strong>
           </div>
         </div>
+
+        <WalletPinModal
+          isOpen={pinModalOpen}
+          onClose={() => setPinModalOpen(false)}
+          onSuccess={() => { setShowBalance(true); setPinModalOpen(false); }}
+          token={user?.token}
+          title="Enter PIN to View Wallet Balance"
+        />
+
         <button className="sidebar-logout" onClick={onLogout}>
           <LogOut size={16} /><span>Sign out</span>
         </button>
@@ -143,6 +167,8 @@ const Dashboard = () => {
 
   const role  = isAuthor ? "author" : isPublisher ? "publisher" : "reader";
   const token = user?.token;
+  const [payingBookId, setPayingBookId] = useState(null); // holds bookId awaiting PIN
+  const [payCostPinOpen, setPayCostPinOpen] = useState(false);
 
   const fetchBooks = async () => {
     if (!token) return;
@@ -167,14 +193,43 @@ const Dashboard = () => {
     }
   }, [role, token]);
 
-  const handlePayCost = async (bookId) => {
-    if (!window.confirm("Confirm Web3 escrow payout transaction of proposed cost?")) return;
+  const handlePayCost = (bookId) => {
+    setPayingBookId(bookId);
+    setPayCostPinOpen(true);
+  };
+
+  const handlePayCostAfterPin = async () => {
+    const bookId = payingBookId;
+    setPayCostPinOpen(false);
+    setPayingBookId(null);
     try {
-      const { data } = await axios.post(`${BASE_URL}/api/manuscripts/${bookId}/pay-cost`, {}, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      // Find publisher wallet address from book data if available
+      const book = books.find(b => (b._id || b.id) === bookId);
+      const publisherWalletAddr =
+        book?.publisher?.blockchainWallet?.address ||
+        book?.publisher?.walletAddress ||
+        "0x0000000000000000000000000000000000000000";
+      const publishingCost = book?.publishingCost || 0;
+
+      // Attempt MetaMask transaction (proportional ETH: $1 = 0.0001 ETH)
+      let txHash = "";
+      if (publishingCost > 0) {
+        const ethVal = (publishingCost * 0.0001).toFixed(5);
+        try {
+          txHash = await sendMetaMaskTransaction(publisherWalletAddr, ethVal);
+        } catch (metamaskErr) {
+          alert("MetaMask transaction failed: " + metamaskErr.message);
+          return;
+        }
+      }
+
+      const { data } = await axios.post(
+        `${BASE_URL}/api/manuscripts/${bookId}/pay-cost`,
+        { txHash },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
       if (data.success) {
-        alert("Payment verified on Blockchain ledger. Book published successfully!");
+        alert(`Payment verified on Blockchain ledger${txHash ? " (Tx: " + txHash.slice(0, 12) + "...)" : ""}. Book published successfully!`);
         if (data.walletBalance !== undefined) {
           updateUserFields({ walletBalance: data.walletBalance });
         }
@@ -283,6 +338,15 @@ const Dashboard = () => {
         </header>
         <div className="dash-body">{renderContent()}</div>
       </div>
+
+      {/* PIN Modal for Publishing Fee Payment */}
+      <WalletPinModal
+        isOpen={payCostPinOpen}
+        onClose={() => { setPayCostPinOpen(false); setPayingBookId(null); }}
+        onSuccess={handlePayCostAfterPin}
+        token={token}
+        title="Enter PIN to Authorize Publishing Fee Payment"
+      />
     </div>
   );
 };

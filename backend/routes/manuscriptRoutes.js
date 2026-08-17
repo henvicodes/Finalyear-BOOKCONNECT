@@ -3,6 +3,7 @@ const router = express.Router();
 const Book = require("../models/Book");
 const User = require("../models/User");
 const Message = require("../models/Message");
+const Transaction = require("../models/Transaction");
 const { protect, authorize } = require("../middleware/authMiddleware");
 
 // 1. POST /api/manuscripts -> Create manuscript (author only)
@@ -37,7 +38,7 @@ router.post("/", protect, authorize("author"), async (req, res) => {
 router.get("/", protect, authorize("author"), async (req, res) => {
   try {
     const manuscripts = await Book.find({ author: req.user._id })
-      .populate("publisher", "name email profilePicture")
+      .populate("publisher", "name email profilePicture blockchainWallet walletAddress")
       .sort("-createdAt");
     
     // map _id to id for frontend compatibility
@@ -57,8 +58,8 @@ router.get("/", protect, authorize("author"), async (req, res) => {
 router.get("/:id", protect, async (req, res) => {
   try {
     const manuscript = await Book.findById(req.params.id)
-      .populate("author", "name email bio profilePicture")
-      .populate("publisher", "name email profilePicture");
+      .populate("author", "name email bio profilePicture blockchainWallet walletAddress")
+      .populate("publisher", "name email profilePicture blockchainWallet walletAddress");
 
     if (!manuscript) {
       return res.status(404).json({ success: false, message: "Manuscript not found" });
@@ -290,6 +291,18 @@ router.post("/:id/pay-cost", protect, authorize("author"), async (req, res) => {
       publisher.walletBalance = (publisher.walletBalance || 0) + manuscript.publishingCost;
       await publisher.save();
     }
+
+    const { txHash } = req.body;
+    // Log in Transaction Ledger
+    await Transaction.create({
+      sender: req.user._id,
+      receiver: manuscript.publisher,
+      amount: manuscript.publishingCost,
+      txHash: txHash || undefined,
+      type: "publishing_fee",
+      status: "completed",
+      note: `Paid publishing fee for "${manuscript.title}"`
+    });
 
     // System message
     await Message.create({

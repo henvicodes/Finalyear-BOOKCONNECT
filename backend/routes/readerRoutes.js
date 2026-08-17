@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const Book = require("../models/Book");
 const User = require("../models/User");
+const Transaction = require("../models/Transaction");
 const { protect, authorize } = require("../middleware/authMiddleware");
 
 // 1. POST /api/books/:id/purchase -> Unlock paid book
@@ -33,6 +34,18 @@ router.post("/:id/purchase", protect, authorize("reader"), async (req, res) => {
       author.walletBalance = (author.walletBalance || 0) + price;
       await author.save();
     }
+
+    const { txHash } = req.body;
+    // Log in Transaction Ledger
+    await Transaction.create({
+      sender: req.user._id,
+      receiver: book.author,
+      amount: price,
+      txHash: txHash || undefined,
+      type: "book_purchase",
+      status: "completed",
+      note: `Purchased book "${book.title}"`
+    });
 
     res.json({
       success: true,

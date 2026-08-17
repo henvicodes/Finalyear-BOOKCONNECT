@@ -28,7 +28,7 @@ const getBooks = async (req, res) => {
 
     const [books, total] = await Promise.all([
       Book.find(query)
-        .populate("author", "name profilePicture role")
+        .populate("author", "name profilePicture role blockchainWallet walletAddress")
         .sort(sort)
         .skip(skip)
         .limit(Number(limit)),
@@ -54,7 +54,7 @@ const getBooks = async (req, res) => {
 const getBookById = async (req, res) => {
   try {
     const book = await Book.findById(req.params.id)
-      .populate("author", "name profilePicture bio role")
+      .populate("author", "name profilePicture bio role blockchainWallet walletAddress")
       .populate("collaborators", "name profilePicture");
 
     if (!book) {
@@ -106,7 +106,7 @@ const createBook = async (req, res) => {
       status: "draft",
     });
 
-    await book.populate("author", "name profilePicture");
+    await book.populate("author", "name profilePicture blockchainWallet walletAddress");
 
     res.status(201).json({ success: true, data: book });
   } catch (error) {
@@ -154,7 +154,7 @@ const updateBook = async (req, res) => {
     });
 
     await book.save();
-    await book.populate("author", "name profilePicture");
+    await book.populate("author", "name profilePicture blockchainWallet walletAddress");
 
     res.json({ success: true, data: book });
   } catch (error) {

@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import {
-  BookOpen, Eye, Star, Search, Clock, CheckCircle, Plus, BookMarked, Layers,
+  BookOpen, Eye, EyeOff, Star, Search, Clock, CheckCircle, Plus, BookMarked, Layers,
   DollarSign, UserCheck, Settings, Heart, AlertCircle, RefreshCw, ChevronRight, Sparkles, LogOut, BarChart2, MessageCircle
 } from "lucide-react";
 import RatingStars from "../components/RatingStars";
 import ChatInterface from "../components/ChatInterface";
+import WalletPinModal from "../components/WalletPinModal";
 import { useAuth } from "../context/AuthContext";
+import { sendMetaMaskTransaction } from "../services/web3";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
@@ -28,6 +30,10 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
   const { updateUserFields } = useAuth();
   const [activeTab, setActiveTab] = useState("overview");
   const [library, setLibrary] = useState([]);
+  const [showBalance, setShowBalance] = useState(false);
+  const [balancePinOpen, setBalancePinOpen] = useState(false);
+  const [purchasePinOpen, setPurchasePinOpen] = useState(false);
+  const [pendingPurchaseBook, setPendingPurchaseBook] = useState(null);
   const [loadingLib, setLoadingLib] = useState(false);
 
   // Discover Marketplace
@@ -132,21 +138,27 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
     fetchDiscoverBooks(genre, searchQuery);
   };
 
-  // Purchase/Unlock a paid book
-  const handlePurchaseBook = async (book) => {
+  // Purchase/Unlock a paid book — now PIN + MetaMask gated
+  const handlePurchaseBook = (book) => {
     const isPaid = book.isPaid || book.price > 0;
-    const confirmMsg = isPaid 
-      ? `Confirm MetaMask transaction to purchase "${book.title}" for $${book.price}?`
-      : `Unlock free book "${book.title}" and add to your library?`;
+    if (!isPaid) {
+      // Free unlock: no PIN/MetaMask needed, proceed directly
+      executePurchase(book, "");
+      return;
+    }
+    setPendingPurchaseBook(book);
+    setPurchasePinOpen(true);
+  };
 
-    if (!window.confirm(confirmMsg)) return;
-
+  const executePurchase = async (book, txHash) => {
     try {
-      const { data } = await axios.post(`${BASE_URL}/api/reader/${book._id}/purchase`, {}, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const { data } = await axios.post(
+        `${BASE_URL}/api/reader/${book._id}/purchase`,
+        { txHash },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
       if (data.success) {
-        alert(data.message);
+        alert(data.message + (txHash ? `\nTx: ${txHash.slice(0, 14)}...` : ""));
         if (data.walletBalance !== undefined) {
           updateUserFields({ walletBalance: data.walletBalance });
         }
@@ -156,6 +168,30 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
     } catch (err) {
       alert(err.response?.data?.message || "Purchase failed.");
     }
+  };
+
+  const handlePurchaseAfterPin = async () => {
+    const book = pendingPurchaseBook;
+    setPurchasePinOpen(false);
+    setPendingPurchaseBook(null);
+    if (!book) return;
+
+    const authorWalletAddr =
+      book.author?.blockchainWallet?.address ||
+      book.author?.walletAddress ||
+      "0x0000000000000000000000000000000000000000";
+    const price = book.price || 0;
+    let txHash = "";
+    if (price > 0) {
+      const ethVal = (price * 0.0001).toFixed(5);
+      try {
+        txHash = await sendMetaMaskTransaction(authorWalletAddr, ethVal);
+      } catch (metamaskErr) {
+        alert("MetaMask transaction failed: " + metamaskErr.message);
+        return;
+      }
+    }
+    await executePurchase(book, txHash);
   };
 
   // Reading Progress update
@@ -283,7 +319,7 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
           </button>
         </nav>
 
-        {/* Wallet Balance widget */}
+        {/* Wallet Balance widget — masked by default (GPay style) */}
         <div style={{
           margin: "10px 16px",
           padding: "12px 14px",
@@ -292,13 +328,24 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
           borderRadius: 12,
           display: "flex",
           flexDirection: "column",
-          gap: 4
+          gap: 6
         }}>
-          <span style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: "bold" }}>Wallet Balance</span>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: "bold" }}>Wallet Balance</span>
+            <button
+              onClick={() => showBalance ? setShowBalance(false) : setBalancePinOpen(true)}
+              style={{ background: "none", border: "none", color: "#059669", cursor: "pointer", padding: 0 }}
+              title={showBalance ? "Hide balance" : "Reveal with PIN"}
+            >
+              {showBalance ? <EyeOff size={14} /> : <Eye size={14} />}
+            </button>
+          </div>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <DollarSign size={14} color="#059669" />
             <strong style={{ fontSize: 15, color: "#1e293b", fontFamily: "sans-serif" }}>
-              ${user?.walletBalance !== undefined ? user.walletBalance.toFixed(2) : "1,000.00"}
+              {showBalance
+                ? `$${(user?.walletBalance !== undefined ? user.walletBalance : 1000).toFixed(2)}`
+                : "$ ••••••"}
             </strong>
           </div>
         </div>
@@ -307,6 +354,24 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
           <LogOut size={16} /><span>Sign out</span>
         </button>
       </aside>
+
+      {/* PIN Modal — Reveal Balance */}
+      <WalletPinModal
+        isOpen={balancePinOpen}
+        onClose={() => setBalancePinOpen(false)}
+        onSuccess={() => { setShowBalance(true); setBalancePinOpen(false); }}
+        token={token}
+        title="Enter PIN to View Wallet Balance"
+      />
+
+      {/* PIN Modal — Purchase Authorization */}
+      <WalletPinModal
+        isOpen={purchasePinOpen}
+        onClose={() => { setPurchasePinOpen(false); setPendingPurchaseBook(null); }}
+        onSuccess={handlePurchaseAfterPin}
+        token={token}
+        title={`Enter PIN to Purchase "${pendingPurchaseBook?.title || "Book"}"`}
+      />
 
       {/* Main Area */}
       <div className="dashboard-main">
