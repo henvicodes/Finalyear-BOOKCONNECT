@@ -412,6 +412,7 @@ const linkWallet = async (req, res) => {
         address: walletAddress,
         isLinked: true,
       };
+      user.walletAddress = walletAddress;
 
       await user.save();
 

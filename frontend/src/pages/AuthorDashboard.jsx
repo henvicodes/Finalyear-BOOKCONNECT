@@ -8,6 +8,7 @@ import {
 import ChatInterface from "../components/ChatInterface";
 import confetti from "canvas-confetti";
 import { useAuth } from "../context/AuthContext";
+import { connectMetaMask, getConnectedAccount, isMetaMaskInstalled } from "../services/web3";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
@@ -1015,12 +1016,40 @@ export const AuthorEditBook = ({ token, bookId, setActive, fetchBooks }) => {
 
 // ─── AUTHOR BLOCKCHAIN ───────────────────────────────────────────────────────
 export const AuthorBlockchain = ({ token, books, user, fetchBooks }) => {
-  const [walletConnected, setWalletConnected] = useState(!!user?.blockchainWallet?.isLinked);
-  const [walletAddress, setWalletAddress] = useState(user?.blockchainWallet?.address || "");
+  const [walletConnected, setWalletConnected] = useState(false);
+  const [walletAddress, setWalletAddress] = useState("");
   const [selectedBookId, setSelectedBookId] = useState("");
   const [isRegistering, setIsRegistering] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const [verifyResult, setVerifyResult] = useState(null);
+  const [connecting, setConnecting] = useState(false);
+  const [connectError, setConnectError] = useState("");
+  const [metamaskDetected, setMetamaskDetected] = useState(true);
+
+  // Auto-detect MetaMask and restore existing connection on mount
+  useEffect(() => {
+    const detect = async () => {
+      // First check if user already linked in DB
+      if (user?.blockchainWallet?.isLinked && user?.blockchainWallet?.address) {
+        setWalletAddress(user.blockchainWallet.address);
+        setWalletConnected(true);
+      }
+
+      // Check if MetaMask extension is installed
+      if (!isMetaMaskInstalled()) {
+        setMetamaskDetected(false);
+        return;
+      }
+
+      // Try to get already-authorized account (no popup)
+      const existing = await getConnectedAccount();
+      if (existing) {
+        setWalletAddress(existing);
+        setWalletConnected(true);
+      }
+    };
+    detect();
+  }, [user]);
 
   useEffect(() => {
     if (books.length > 0 && !selectedBookId) {
@@ -1029,16 +1058,23 @@ export const AuthorBlockchain = ({ token, books, user, fetchBooks }) => {
   }, [books, selectedBookId]);
 
   const handleConnectWallet = async () => {
-    setWalletConnected(true);
-    const mockAddr = "0x" + Array.from({ length: 40 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
-    setWalletAddress(mockAddr);
+    setConnecting(true);
+    setConnectError("");
     try {
-      await axios.post(`${BASE_URL}/api/auth/link-wallet`, { walletAddress: mockAddr }, {
+      // This triggers the actual MetaMask popup via eth_requestAccounts
+      const address = await connectMetaMask();
+      setWalletAddress(address);
+      setWalletConnected(true);
+
+      // Save to backend
+      await axios.post(`${BASE_URL}/api/auth/link-wallet`, { walletAddress: address }, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      alert("MetaMask Wallet successfully connected and linked to your account!");
     } catch (err) {
-      console.error(err);
+      console.error("MetaMask connect error:", err);
+      setConnectError(err.message || "Failed to connect MetaMask. Please try again.");
+    } finally {
+      setConnecting(false);
     }
   };
 
@@ -1113,11 +1149,83 @@ export const AuthorBlockchain = ({ token, books, user, fetchBooks }) => {
             )}
           </div>
           {!walletConnected && (
-            <button onClick={handleConnectWallet} className="btn-primary" style={{ background: "linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)" }}>
-              Connect Wallet
-            </button>
+            !metamaskDetected ? (
+              <a
+                href="https://metamask.io/download/"
+                target="_blank"
+                rel="noreferrer"
+                className="btn-primary"
+                style={{
+                  background: "#f6851b",
+                  textDecoration: "none",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "10px 18px",
+                  borderRadius: 10,
+                  color: "#fff",
+                  fontWeight: "bold",
+                  fontSize: 13
+                }}
+              >
+                🦊 Install MetaMask
+              </a>
+            ) : (
+              <button
+                onClick={handleConnectWallet}
+                disabled={connecting}
+                className="btn-primary"
+                style={{
+                  background: connecting
+                    ? "#94a3b8"
+                    : "linear-gradient(135deg, #f6851b 0%, #e2761b 100%)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "10px 18px",
+                  borderRadius: 10,
+                  color: "#fff",
+                  fontWeight: "bold",
+                  fontSize: 13,
+                  border: "none",
+                  cursor: connecting ? "not-allowed" : "pointer"
+                }}
+              >
+                {connecting ? (
+                  <><span>⏳</span><span>Opening MetaMask...</span></>
+                ) : (
+                  <><span style={{ fontSize: 16 }}>🦊</span><span>Connect MetaMask</span></>
+                )}
+              </button>
+            )
           )}
         </div>
+
+        {/* Connection Error Banner */}
+        {connectError && (
+          <div style={{
+            background: "rgba(239, 68, 68, 0.08)",
+            border: "1px solid rgba(239, 68, 68, 0.3)",
+            borderRadius: 10,
+            padding: "10px 14px",
+            fontSize: 12,
+            color: "#ef4444",
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 8,
+            marginTop: 12
+          }}>
+            <span>⚠️</span>
+            <div>
+              <strong>Connection Failed:</strong> {connectError}
+              {connectError.includes("already open") && (
+                <p style={{ margin: "4px 0 0", opacity: 0.8 }}>
+                  Look for the 🦊 MetaMask icon in your browser toolbar and click it.
+                </p>
+              )}
+            </div>
+          </div>
+        )}
 
         <div className="dash-grid" style={{ marginTop: 24 }}>
           <div className="dash-panel">

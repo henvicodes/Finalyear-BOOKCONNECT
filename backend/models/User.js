@@ -90,6 +90,14 @@ const userSchema = new mongoose.Schema(
       type: Number,
       default: 1000,
     },
+    walletPin: {
+      type: String,
+      default: null,
+    },
+    walletAddress: {
+      type: String,
+      default: "",
+    },
     resetPasswordToken: String,
     resetPasswordExpire: Date,
     otpCode: {

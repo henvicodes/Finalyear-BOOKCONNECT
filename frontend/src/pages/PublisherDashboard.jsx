@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import {
-  BookOpen, Eye, Star, Clock, CheckCircle, AlertCircle, Shield,
+  BookOpen, Eye, EyeOff, Star, Clock, CheckCircle, AlertCircle, Shield,
   Users, DollarSign, MessageCircle, Settings, FileText, Send, RefreshCw, BarChart2, Award, LogOut
 } from "lucide-react";
 import ChatInterface from "../components/ChatInterface";
+import WalletPinModal from "../components/WalletPinModal";
 import { Sparkles } from "lucide-react";  
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
@@ -34,6 +35,8 @@ const PublisherDashboard = ({ user, token, onLogout }) => {
   const [proofDoc, setProofDoc] = useState(user?.publisherVerification?.documentLink || "");
   const [isVerified, setIsVerified] = useState(user?.publisherVerification?.isVerified || false);
   const [verifyHash, setVerifyHash] = useState(user?.publisherVerification?.blockchainHash || "");
+  const [showBalance, setShowBalance] = useState(false);
+  const [balancePinOpen, setBalancePinOpen] = useState(false);
 
   // Authors search
   const [authors, setAuthors] = useState([]);
@@ -237,7 +240,7 @@ const PublisherDashboard = ({ user, token, onLogout }) => {
           </button>
         </nav>
 
-        {/* Wallet Balance widget */}
+        {/* Wallet Balance widget — masked by default (GPay style) */}
         <div style={{
           margin: "10px 16px",
           padding: "12px 14px",
@@ -246,13 +249,24 @@ const PublisherDashboard = ({ user, token, onLogout }) => {
           borderRadius: 12,
           display: "flex",
           flexDirection: "column",
-          gap: 4
+          gap: 6
         }}>
-          <span style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: "bold" }}>Wallet Balance</span>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: "bold" }}>Wallet Balance</span>
+            <button
+              onClick={() => showBalance ? setShowBalance(false) : setBalancePinOpen(true)}
+              style={{ background: "none", border: "none", color: "#0369a1", cursor: "pointer", padding: 0 }}
+              title={showBalance ? "Hide balance" : "Reveal with PIN"}
+            >
+              {showBalance ? <EyeOff size={14} /> : <Eye size={14} />}
+            </button>
+          </div>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <DollarSign size={14} color="#0369a1" />
             <strong style={{ fontSize: 15, color: "#1e293b", fontFamily: "sans-serif" }}>
-              ${user?.walletBalance !== undefined ? user.walletBalance.toFixed(2) : "1,000.00"}
+              {showBalance
+                ? `$${(user?.walletBalance !== undefined ? user.walletBalance : 1000).toFixed(2)}`
+                : "$ ••••••"}
             </strong>
           </div>
         </div>
@@ -651,6 +665,15 @@ const PublisherDashboard = ({ user, token, onLogout }) => {
           )}
         </div>
       </div>
+
+      {/* PIN Modal — Reveal Balance */}
+      <WalletPinModal
+        isOpen={balancePinOpen}
+        onClose={() => setBalancePinOpen(false)}
+        onSuccess={() => { setShowBalance(true); setBalancePinOpen(false); }}
+        token={token}
+        title="Enter PIN to View Wallet Balance"
+      />
     </div>
   );
 };

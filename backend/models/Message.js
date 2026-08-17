@@ -24,6 +24,24 @@ const messageSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    isAi: {
+      type: Boolean,
+      default: false,
+    },
+    read: {
+      type: Boolean,
+      default: false,
+    },
+    deletedBy: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
+    deletedForEveryone: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,
