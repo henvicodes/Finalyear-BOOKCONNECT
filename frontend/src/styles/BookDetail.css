@@ -98,8 +98,8 @@
 }
 
 .book-detail-rating .star-filled {
-  fill: #fbbf24;
-  color: #fbbf24;
+  fill: var(--warning);
+  color: var(--warning);
 }
 
 .book-detail-description {
@@ -183,11 +183,77 @@
   border-radius: 12px;
 }
 
+.chapter-content-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
 .chapter-content-title {
   font-size: 1.5rem;
   font-weight: 600;
-  margin-bottom: 1.5rem;
   color: var(--text-primary);
+  margin-bottom: 0;
+}
+
+.chapter-translate-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-muted);
+}
+
+.chapter-translate-bar select {
+  padding: 0.35rem 0.5rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-medium);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+.chapter-translate-bar select:focus {
+  outline: none;
+  border-color: var(--accent-500);
+  box-shadow: var(--shadow-focus);
+}
+
+.chapter-translate-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--accent-200);
+  background: var(--accent-50);
+  color: var(--accent-700);
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--transition-fast);
+}
+.chapter-translate-btn:hover:not(:disabled) {
+  background: var(--accent-100);
+}
+.chapter-translate-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.chapter-translate-btn .spin {
+  animation: chapter-spin 0.9s linear infinite;
+}
+@keyframes chapter-spin {
+  to { transform: rotate(360deg); }
+}
+
+.chapter-translate-error {
+  font-size: var(--text-sm);
+  color: var(--danger);
+  margin-bottom: 1rem;
 }
 
 .chapter-content-text {
@@ -203,6 +269,30 @@
   text-align: center;
   padding: 2rem;
   color: var(--text-muted);
+}
+
+.chapter-content-paywall {
+  text-align: center;
+  padding: 3rem 1.5rem;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  border-radius: 12px;
+}
+
+.chapter-content-paywall svg {
+  color: var(--accent-600);
+  margin-bottom: 0.75rem;
+}
+
+.chapter-content-paywall h3 {
+  color: var(--text-primary);
+  margin: 0 0 0.5rem;
+  font-size: 1.1rem;
+}
+
+.chapter-content-paywall p {
+  margin: 0 0 1.25rem;
+  font-size: 0.9rem;
 }
 
 @media (max-width: 768px) {

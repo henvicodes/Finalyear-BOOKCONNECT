@@ -2,7 +2,7 @@
  * Wait up to 3 seconds for MetaMask to inject window.ethereum
  * (MetaMask injects asynchronously on page load)
  */
-const waitForEthereum = (timeoutMs = 3000) => {
+export const waitForEthereum = (timeoutMs = 3000) => {
   return new Promise((resolve) => {
     if (window.ethereum) {
       resolve(window.ethereum);
@@ -25,6 +25,48 @@ const waitForEthereum = (timeoutMs = 3000) => {
 
 export const isMetaMaskInstalled = () => {
   return typeof window !== "undefined" && Boolean(window.ethereum);
+};
+
+export const SEPOLIA_CHAIN_ID = "0xaa36a7"; // 11155111 in hex
+
+// A public, no-API-key Sepolia RPC — used only as a fallback so
+// `wallet_addEthereumChain` has something to hand MetaMask if the user's
+// wallet doesn't already know about Sepolia. This never touches our own
+// Alchemy key (that's only used server-side, for deploying contracts).
+const PUBLIC_SEPOLIA_RPC = "https://ethereum-sepolia-rpc.publicnode.com";
+
+/**
+ * Makes sure the connected MetaMask wallet is on Sepolia, asking it to
+ * switch. If Sepolia isn't in the wallet's network list yet (uncommon, but
+ * happens on some setups), offers to add it via a public RPC first rather
+ * than dead-ending with "please switch manually" — a user should never
+ * need to hand-enter an RPC URL themselves to use this app.
+ */
+export const ensureSepoliaNetwork = async (ethereum) => {
+  try {
+    await ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: SEPOLIA_CHAIN_ID }] });
+    return;
+  } catch (switchErr) {
+    // 4902 = chain not added to this wallet yet.
+    if (switchErr?.code === 4902) {
+      try {
+        await ethereum.request({
+          method: "wallet_addEthereumChain",
+          params: [{
+            chainId: SEPOLIA_CHAIN_ID,
+            chainName: "Sepolia",
+            nativeCurrency: { name: "Sepolia ETH", symbol: "ETH", decimals: 18 },
+            rpcUrls: [PUBLIC_SEPOLIA_RPC],
+            blockExplorerUrls: ["https://sepolia.etherscan.io"]
+          }]
+        });
+        return;
+      } catch {
+        throw new Error("Please add the Sepolia test network to MetaMask and try again.");
+      }
+    }
+    throw new Error("Please switch MetaMask to the Sepolia test network and try again.");
+  }
 };
 
 export const connectMetaMask = async () => {

@@ -7,6 +7,7 @@ import {
   useLocation
 } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
+import { ThemeProvider } from "./context/ThemeContext";
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
 import PrivateRoute from "./components/PrivateRoute";
@@ -25,6 +26,9 @@ import EditBookPage from "./pages/EditBookPage";
 
 import ProfilePage from "./pages/Profile/ProfilePage.jsx";
 import EditProfilePage from "./pages/Profile/EditProfilePage.jsx";
+
+import PersonalizedRecommendationsPage from "./pages/Recommendations/PersonalizedRecommendationsPage.jsx";
+import ReaderWriterMatchingPage from "./pages/Recommendations/ReaderWriterMatchingPage.jsx";
 
 // Sub-component wrapping logic to enable valid useLocation usage inside the Router context
 const AppContent = () => {
@@ -72,6 +76,22 @@ const AppContent = () => {
               </PrivateRoute>
             }
           />
+          <Route
+            path="/recommendations"
+            element={
+              <PrivateRoute>
+                <PersonalizedRecommendationsPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/matching"
+            element={
+              <PrivateRoute>
+                <ReaderWriterMatchingPage />
+              </PrivateRoute>
+            }
+          />
 
           {/* Author only */}
           <Route
@@ -100,11 +120,13 @@ const AppContent = () => {
 const App = () => {
   return (
     <ErrorBoundary>
-      <AuthProvider>
-        <Router>
-          <AppContent />
-        </Router>
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <Router>
+            <AppContent />
+          </Router>
+        </AuthProvider>
+      </ThemeProvider>
     </ErrorBoundary>
   );
 };

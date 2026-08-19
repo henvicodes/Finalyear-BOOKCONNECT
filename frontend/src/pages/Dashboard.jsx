@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import SearchBar from "../components/SearchBar";
 import WalletPinModal from "../components/WalletPinModal";
-import { sendMetaMaskTransaction, getConnectedAccount } from "../services/web3";
+import { sendMetaMaskTransaction } from "../services/web3";
 import "./Dashboard.css";
 import {
   AuthorOverview,
@@ -63,7 +63,8 @@ const Sidebar = ({ role, active, setActive, onLogout, user, sidebarOpen, setSide
   ];
 
   const links = role === "author" ? authorLinks : role === "publisher" ? publisherLinks : readerLinks;
-  const roleColor = role === "author" ? "#7c3aed" : role === "publisher" ? "#0369a1" : "#059669";
+  const roleColor = role === "author" ? "var(--accent-600)" : role === "publisher" ? "var(--info)" : "var(--success)";
+  const roleColorBg = role === "author" ? "var(--accent-50)" : role === "publisher" ? "var(--info-bg)" : "var(--success-bg)";
   const roleLabel = role === "author" ? "Author" : role === "publisher" ? "Publisher" : "Reader";
   const [showBalance, setShowBalance] = useState(false);
   const [pinModalOpen, setPinModalOpen] = useState(false);
@@ -84,7 +85,7 @@ const Sidebar = ({ role, active, setActive, onLogout, user, sidebarOpen, setSide
           </div>
           <div className="sidebar-user-info">
             <span className="sidebar-user-name">{user?.name || "User"}</span>
-            <span className="sidebar-role-badge" style={{ background: roleColor + "22", color: roleColor }}>{roleLabel}</span>
+            <span className="sidebar-role-badge" style={{ background: roleColorBg, color: roleColor }}>{roleLabel}</span>
           </div>
         </div>
         <nav className="sidebar-nav">
@@ -93,7 +94,7 @@ const Sidebar = ({ role, active, setActive, onLogout, user, sidebarOpen, setSide
               key={link.id}
               className={`sidebar-link ${active === link.id ? "active" : ""}`}
               onClick={() => { setActive(link.id); setSidebarOpen(false); }}
-              style={active === link.id ? { background: roleColor + "18", color: roleColor, borderColor: roleColor } : {}}
+              style={active === link.id ? { background: roleColorBg, color: roleColor, borderColor: roleColor } : {}}
             >
               {link.icon}<span>{link.label}</span>
               {active === link.id && <ChevronRight size={14} className="link-arrow" />}
@@ -104,15 +105,15 @@ const Sidebar = ({ role, active, setActive, onLogout, user, sidebarOpen, setSide
         <div style={{
           margin: "10px 16px",
           padding: "12px 14px",
-          background: `rgba(${role === "author" ? "124, 58, 237" : "3, 105, 161"}, 0.04)`,
-          border: `1px solid rgba(${role === "author" ? "124, 58, 237" : "3, 105, 161"}, 0.12)`,
+          background: roleColorBg,
+          border: `1px solid var(--border-light)`,
           borderRadius: 12,
           display: "flex",
           flexDirection: "column",
           gap: 6
         }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: "bold" }}>Wallet Balance</span>
+            <span style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: "bold" }}>Wallet Balance</span>
             <button
               onClick={() => showBalance ? setShowBalance(false) : setPinModalOpen(true)}
               style={{ background: "none", border: "none", color: roleColor, cursor: "pointer", padding: 0 }}
@@ -123,7 +124,7 @@ const Sidebar = ({ role, active, setActive, onLogout, user, sidebarOpen, setSide
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <DollarSign size={14} color={roleColor} />
-            <strong style={{ fontSize: 15, color: "#1e293b", fontFamily: "sans-serif" }}>
+            <strong style={{ fontSize: 15, color: "var(--text-primary)", fontFamily: "var(--font-sans)" }}>
               {showBalance
                 ? `$${(user?.walletBalance !== undefined ? user.walletBalance : 1000).toFixed(2)}`
                 : "$ ••••••"}
@@ -148,10 +149,8 @@ const Sidebar = ({ role, active, setActive, onLogout, user, sidebarOpen, setSide
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-const fmt = (n) => n >= 1000 ? (n / 1000).toFixed(1) + "K" : String(n || 0);
-
 const Skel = () => (
-  <div style={{ height: 52, background: "#f3f0ff", borderRadius: 8, marginBottom: 8, opacity: 0.5 }} />
+  <div style={{ height: 52, background: "var(--gray-100)", borderRadius: 8, marginBottom: 8, opacity: 0.5 }} />
 );
 
 import ChatInterface from "../components/ChatInterface";
@@ -304,7 +303,7 @@ const Dashboard = () => {
     }
     return (
       <div className="dash-content coming-soon">
-        <Layers size={48} color="#94a3b8" />
+        <Layers size={48} color="var(--gray-400)" />
         <h2>{active}</h2>
         <p>This section is under construction. Check back soon!</p>
       </div>

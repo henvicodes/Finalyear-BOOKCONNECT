@@ -40,6 +40,24 @@ const protect = async (req, res, next) => {
   }
 };
 
+// Like `protect`, but never rejects the request for a missing/invalid
+// token — it just leaves req.user unset. For routes that are public for
+// some content (e.g. free books) but need to know who's asking in order
+// to gate other content (e.g. paid books) without forcing a login wall.
+const optionalAuth = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith("Bearer")) {
+    try {
+      const token = authHeader.split(" ")[1];
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      req.user = await User.findById(decoded.id).select("-password");
+    } catch {
+      // Invalid/expired token — proceed as anonymous instead of failing.
+    }
+  }
+  next();
+};
+
 // Role-based authorization
 const authorize = (...roles) => {
   return (req, res, next) => {
@@ -60,4 +78,4 @@ const authorize = (...roles) => {
   };
 };
 
-module.exports = { protect, authorize };
+module.exports = { protect, authorize, optionalAuth };

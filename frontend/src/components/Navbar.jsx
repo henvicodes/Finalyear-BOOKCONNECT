@@ -5,6 +5,7 @@ import {
   Search, Filter, Sparkles, Loader, Users
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import ThemeToggle from "./ThemeToggle";
 import "../styles/Navbar.css";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
@@ -290,10 +291,12 @@ const Navbar = () => {
           <BookOpen /><span>BookConnect</span>
         </Link>
 
-        {/* Search bar — center */}
-        <div className="navbar-search">
-          <SearchBar />
-        </div>
+        {/* Search bar — center (signed-in users only; nothing to search before you're in) */}
+        {isAuthenticated && (
+          <div className="navbar-search">
+            <SearchBar />
+          </div>
+        )}
 
         <button className="mobile-menu-btn" onClick={() => setIsOpen(!isOpen)}>
           {isOpen ? <X /> : <Menu />}
@@ -307,6 +310,8 @@ const Navbar = () => {
           {isAuthenticated ? (
             <>
               <li><Link to="/dashboard" onClick={() => setIsOpen(false)}>Dashboard</Link></li>
+              <li><Link to="/recommendations" onClick={() => setIsOpen(false)}>For You</Link></li>
+              <li><Link to="/matching" onClick={() => setIsOpen(false)}>Connect</Link></li>
               <li className="profile-menu-item" ref={dropdownRef}>
                 <button className="btn-profile-trigger" onClick={() => setProfileOpen(!profileOpen)}>
                   <div className="profile-avatar-sm">
@@ -339,6 +344,8 @@ const Navbar = () => {
                       <Settings size={15} /><span>Edit Profile</span>
                     </Link>
                     <div className="dropdown-divider" />
+                    <ThemeToggle variant="icon" className="dropdown-item" />
+                    <div className="dropdown-divider" />
                     <button className="dropdown-item danger" onClick={handleLogout}>
                       <LogOut size={15} /><span>Logout</span>
                     </button>
@@ -356,9 +363,11 @@ const Navbar = () => {
       </div>
 
       {/* Mobile search */}
-      <div className="navbar-search-mobile">
-        <SearchBar />
-      </div>
+      {isAuthenticated && (
+        <div className="navbar-search-mobile">
+          <SearchBar />
+        </div>
+      )}
     </nav>
   );
 };

@@ -26,7 +26,7 @@ const RegisterPage = () => {
   const [showOTP, setShowOTP] = useState(false);
   const [registrationEmail, setRegistrationEmail] = useState("");
 
-  const { register, login } = useAuth();
+  const { login } = useAuth();
   const navigate = useNavigate();
 
   const handleChange = (e) => {

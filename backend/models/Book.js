@@ -100,9 +100,18 @@ const bookSchema = new mongoose.Schema(
     ],
     averageRating: { type: Number, default: 0 },
     totalRatings: { type: Number, default: 0 },
-    // Blockchain
+    // Blockchain — off-chain hash fingerprint stored in MongoDB (a
+    // simulated ledger; see README). Kept separate from the real on-chain
+    // fields below, which reference an actual Sepolia testnet transaction.
     blockchainHash: { type: String },
     isBlockchainVerified: { type: Boolean, default: false },
+    // Real blockchain — set once the author registers this manuscript on
+    // the deployed ManuscriptRegistry smart contract via their own
+    // MetaMask wallet (see frontend/src/services/manuscriptRegistry.js).
+    // The backend never signs this transaction; it just records the
+    // result the frontend already confirmed on-chain.
+    onChainTxHash: { type: String },
+    onChainNetwork: { type: String },
     // Publisher association (optional)
     publisher: {
       type: mongoose.Schema.Types.ObjectId,
@@ -135,6 +144,17 @@ const bookSchema = new mongoose.Schema(
     ],
     isCollaborative: { type: Boolean, default: false },
     collaborators: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+    // Transparent version history: a content-hash snapshot recorded on every
+    // meaningful edit, so authorship and edit history are auditable even
+    // without a real distributed ledger behind them.
+    versionHistory: [
+      {
+        contentHash: { type: String, required: true },
+        wordCount: { type: Number, default: 0 },
+        note: { type: String, default: "Edited" },
+        snapshotAt: { type: Date, default: Date.now },
+      },
+    ],
   },
   { timestamps: true }
 );

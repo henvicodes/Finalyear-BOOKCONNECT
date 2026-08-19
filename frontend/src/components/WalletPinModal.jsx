@@ -84,16 +84,16 @@ const WalletPinModal = ({ isOpen, onClose, onSuccess, token, title = "Enter 4-Di
       padding: 20
     }}>
       <div style={{
-        background: "#1e293b",
-        border: "1px solid rgba(255, 255, 255, 0.12)",
+        background: "var(--bg-primary)",
+        border: "1px solid color-mix(in srgb, var(--text-primary) 8%, transparent)",
         borderRadius: 20,
         width: "100%",
         maxWidth: 380,
         padding: 28,
-        boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
+        boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
         position: "relative",
-        color: "#f8fafc",
-        fontFamily: "'Sora', sans-serif"
+        color: "var(--text-primary)",
+        fontFamily: "var(--font-sans)"
       }}>
         {/* Close Button */}
         <button
@@ -104,7 +104,7 @@ const WalletPinModal = ({ isOpen, onClose, onSuccess, token, title = "Enter 4-Di
             right: 18,
             background: "none",
             border: "none",
-            color: "#94a3b8",
+            color: "var(--text-muted)",
             cursor: "pointer"
           }}
         >
@@ -117,20 +117,20 @@ const WalletPinModal = ({ isOpen, onClose, onSuccess, token, title = "Enter 4-Di
             width: 54,
             height: 54,
             borderRadius: "50%",
-            background: "rgba(124, 58, 237, 0.15)",
-            border: "1px solid rgba(124, 58, 237, 0.3)",
+            background: "var(--accent-50)",
+            border: "1px solid var(--accent-200)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             margin: "0 auto 12px",
-            color: "#a78bfa"
+            color: "var(--accent-600)"
           }}>
             {isSetupMode ? <KeyRound size={26} /> : <Lock size={26} />}
           </div>
           <h3 style={{ fontSize: 18, fontWeight: 700, margin: "0 0 6px 0" }}>
             {isSetupMode ? "Setup 4-Digit Security PIN" : title}
           </h3>
-          <p style={{ fontSize: 12, color: "#94a3b8", margin: 0 }}>
+          <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>
             {isSetupMode
               ? "Create a 4-digit PIN to secure your wallet balance & authorize transactions"
               : "Enter your PIN to verify authorization"}
@@ -139,9 +139,9 @@ const WalletPinModal = ({ isOpen, onClose, onSuccess, token, title = "Enter 4-Di
 
         {error && (
           <div style={{
-            background: "rgba(239, 68, 68, 0.12)",
-            border: "1px solid rgba(239, 68, 68, 0.3)",
-            color: "#fca5a5",
+            background: "var(--danger-bg)",
+            border: "1px solid var(--danger-border)",
+            color: "var(--danger)",
             fontSize: 12,
             padding: "10px 12px",
             borderRadius: 8,
@@ -157,9 +157,9 @@ const WalletPinModal = ({ isOpen, onClose, onSuccess, token, title = "Enter 4-Di
 
         {successMsg && (
           <div style={{
-            background: "rgba(16, 185, 129, 0.12)",
-            border: "1px solid rgba(16, 185, 129, 0.3)",
-            color: "#6ee7b7",
+            background: "var(--success-bg)",
+            border: "1px solid var(--success-border)",
+            color: "var(--success)",
             fontSize: 12,
             padding: "10px 12px",
             borderRadius: 8,
@@ -183,14 +183,14 @@ const WalletPinModal = ({ isOpen, onClose, onSuccess, token, title = "Enter 4-Di
                   width: 44,
                   height: 48,
                   borderRadius: 12,
-                  background: "rgba(255, 255, 255, 0.05)",
-                  border: pin.length > idx ? "2px solid #7c3aed" : "1px solid rgba(255, 255, 255, 0.15)",
+                  background: "color-mix(in srgb, var(--text-primary) 4%, transparent)",
+                  border: pin.length > idx ? "2px solid var(--accent-600)" : "1px solid color-mix(in srgb, var(--text-primary) 12%, transparent)",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
                   fontSize: 22,
                   fontWeight: "bold",
-                  color: "#a78bfa"
+                  color: "var(--accent-700)"
                 }}
               >
                 {pin.length > idx ? "•" : ""}
@@ -226,9 +226,9 @@ const WalletPinModal = ({ isOpen, onClose, onSuccess, token, title = "Enter 4-Di
                 style={{
                   padding: "12px 0",
                   borderRadius: 10,
-                  background: "rgba(255, 255, 255, 0.05)",
-                  border: "1px solid rgba(255, 255, 255, 0.08)",
-                  color: "#f8fafc",
+                  background: "color-mix(in srgb, var(--text-primary) 4%, transparent)",
+                  border: "1px solid color-mix(in srgb, var(--text-primary) 8%, transparent)",
+                  color: "var(--text-primary)",
                   fontSize: 16,
                   fontWeight: "600",
                   cursor: "pointer"
@@ -245,7 +245,7 @@ const WalletPinModal = ({ isOpen, onClose, onSuccess, token, title = "Enter 4-Di
             style={{
               width: "100%",
               padding: "12px",
-              background: "linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)",
+              background: "linear-gradient(135deg, var(--accent-600) 0%, var(--accent-700) 100%)",
               color: "#fff",
               border: "none",
               borderRadius: 10,
@@ -270,7 +270,7 @@ const WalletPinModal = ({ isOpen, onClose, onSuccess, token, title = "Enter 4-Di
               style={{
                 background: "none",
                 border: "none",
-                color: "#94a3b8",
+                color: "var(--text-muted)",
                 fontSize: 11,
                 width: "100%",
                 marginTop: 12,

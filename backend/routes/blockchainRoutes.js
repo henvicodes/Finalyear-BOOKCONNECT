@@ -69,6 +69,38 @@ router.post("/verify/:id", protect, async (req, res) => {
   }
 });
 
+// 2b. POST /api/blockchain/onchain-register/:id -> Record a REAL on-chain
+// registration transaction. The author's own MetaMask wallet already
+// signed and submitted this to the ManuscriptRegistry smart contract on
+// Sepolia (see frontend/src/services/manuscriptRegistry.js) — this route
+// does not sign anything itself, it just persists the resulting tx hash
+// for quick display without re-querying the chain on every page load.
+router.post("/onchain-register/:id", protect, async (req, res) => {
+  try {
+    const { txHash, network } = req.body;
+    if (!txHash || !/^0x[0-9a-fA-F]{64}$/.test(txHash)) {
+      return res.status(400).json({ success: false, message: "A valid transaction hash is required" });
+    }
+
+    const book = await Book.findById(req.params.id);
+    if (!book) {
+      return res.status(404).json({ success: false, message: "Book not found" });
+    }
+    if (book.author.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: "Not authorized" });
+    }
+
+    book.onChainTxHash = txHash;
+    book.onChainNetwork = network || "sepolia";
+    await book.save();
+
+    res.json({ success: true, message: "On-chain registration recorded", onChainTxHash: book.onChainTxHash });
+  } catch (error) {
+    console.error("On-chain register record error:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+});
+
 // 3. POST /api/blockchain/set-pin -> Set user 4-digit Security PIN
 router.post("/set-pin", protect, async (req, res) => {
   try {
@@ -132,8 +164,14 @@ router.get("/transactions", protect, async (req, res) => {
 // 6. POST /api/blockchain/transfer -> P2P Web3 Payment Transfer
 router.post("/transfer", protect, async (req, res) => {
   try {
-    const { receiverId, amount, pin, note, txHash } = req.body;
+    const { receiverId, amount, pin, note, txHash, network } = req.body;
     const senderId = req.user._id;
+
+    // Only trust a txHash as a real on-chain payment if it looks like an
+    // actual Ethereum transaction hash — the frontend only sends one when
+    // the sender's own MetaMask signed and mined a PaymentLedger
+    // transaction, but validate here too rather than taking it on faith.
+    const isRealTxHash = typeof txHash === "string" && /^0x[0-9a-fA-F]{64}$/.test(txHash);
 
     if (!receiverId || !amount || amount <= 0) {
       return res.status(400).json({ success: false, message: "Receiver and valid amount are required" });
@@ -171,7 +209,9 @@ router.post("/transfer", protect, async (req, res) => {
       sender: senderId,
       receiver: receiverId,
       amount: numAmount,
-      txHash: txHash || undefined,
+      txHash: isRealTxHash ? txHash : undefined,
+      onChain: isRealTxHash,
+      network: isRealTxHash ? (network || "sepolia") : undefined,
       type: "p2p_transfer",
       status: "completed",
       note: note || "Web3 P2P Payment Transfer"

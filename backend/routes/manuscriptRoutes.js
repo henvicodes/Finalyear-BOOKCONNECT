@@ -5,6 +5,7 @@ const User = require("../models/User");
 const Message = require("../models/Message");
 const Transaction = require("../models/Transaction");
 const { protect, authorize } = require("../middleware/authMiddleware");
+const { snapshotVersion } = require("../utils/versionHistory");
 
 // 1. POST /api/manuscripts -> Create manuscript (author only)
 router.post("/", protect, authorize("author"), async (req, res) => {
@@ -14,7 +15,7 @@ router.post("/", protect, authorize("author"), async (req, res) => {
       return res.status(400).json({ success: false, message: "Title and Content are required" });
     }
 
-    const manuscript = await Book.create({
+    const manuscript = new Book({
       title,
       content,
       description: `Manuscript: ${title}`,
@@ -26,6 +27,8 @@ router.post("/", protect, authorize("author"), async (req, res) => {
       coverImage: coverImage || `https://picsum.photos/seed/${encodeURIComponent(title)}/300/450`,
       status: "draft"
     });
+    snapshotVersion(manuscript, "Manuscript created");
+    await manuscript.save();
 
     res.status(201).json({ success: true, id: manuscript._id, data: manuscript });
   } catch (error) {
@@ -108,8 +111,11 @@ router.put("/:id", protect, authorize("author"), async (req, res) => {
     if (publisher !== undefined) manuscript.publisher = publisher || null;
     if (coverImage !== undefined) manuscript.coverImage = coverImage;
 
+    if (content !== undefined || title !== undefined) {
+      snapshotVersion(manuscript, "Edited");
+    }
     await manuscript.save();
-    
+
     const obj = manuscript.toObject();
     obj.id = obj._id;
 
@@ -278,6 +284,7 @@ router.post("/:id/pay-cost", protect, authorize("author"), async (req, res) => {
       });
     }
 
+    snapshotVersion(manuscript, "Published");
     await manuscript.save();
 
     // Deduct from Author

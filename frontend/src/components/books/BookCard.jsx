@@ -14,6 +14,9 @@ const BookCard = ({ book }) => {
             <BookOpen size={32} />
           </div>
         )}
+        <span className={`book-card-price-badge ${book.isPaid ? "paid" : "free"}`}>
+          {book.isPaid ? `$${book.price}` : "Free"}
+        </span>
       </div>
       <div className="book-card-info">
         <h3 className="book-card-title">{book.title}</h3>
