@@ -1,2 +1,3 @@
 mongod.log
 mongod.log.*
+.claude/worktrees/
