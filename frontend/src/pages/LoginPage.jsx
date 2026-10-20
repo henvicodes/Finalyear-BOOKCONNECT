@@ -5,10 +5,7 @@ import { BookOpen, Mail, Lock, AlertCircle } from "lucide-react";
 import "../styles/LoginPage.css";
 
 const LoginPage = () => {
-  const [formData, setFormData] = useState({
-    email: "",
-    password: "",
-  });
+  const [formData, setFormData] = useState({ email: "", password: "" });
   const [errors, setErrors] = useState({});
   const [isLoading, setIsLoading] = useState(false);
 
@@ -16,57 +13,54 @@ const LoginPage = () => {
   const navigate = useNavigate();
 
   const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
-    if (errors[e.target.name]) {
-      setErrors({
-        ...errors,
-        [e.target.name]: "",
-      });
-    }
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+    if (errors[e.target.name]) setErrors({ ...errors, [e.target.name]: "" });
   };
 
   const validateForm = () => {
     const newErrors = {};
-    if (!formData.email) {
-      newErrors.email = "Email is required";
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
+    if (!formData.email) newErrors.email = "Email is required";
+    else if (!/\S+@\S+\.\S+/.test(formData.email))
       newErrors.email = "Email is invalid";
-    }
-    if (!formData.password) {
-      newErrors.password = "Password is required";
-    }
+    if (!formData.password) newErrors.password = "Password is required";
     return newErrors;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     const newErrors = validateForm();
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
-      return;
-    }
+    if (Object.keys(newErrors).length > 0) return setErrors(newErrors);
 
     setIsLoading(true);
     const result = await login(formData.email, formData.password);
     setIsLoading(false);
 
-    if (result.success) {
-      navigate("/dashboard");
-    } else {
-      setErrors({ general: result.error });
-    }
+    if (result.success) navigate("/dashboard");
+    else setErrors({ general: result.error });
   };
 
   return (
     <div className="login-container">
       <div className="login-card">
+        {/* Unified Logo */}
         <div className="logo-wrapper">
-          <div className="logo-icon">
-            <BookOpen />
-          </div>
+          <Link
+            to="/"
+            className="sidebar-logo"
+            style={{ textDecoration: "none" }}
+          >
+            <BookOpen size={28} color="#7c3aed" />
+            <span
+              style={{
+                fontSize: 24,
+                fontWeight: 800,
+                color: "#7c3aed",
+                letterSpacing: "-0.5px",
+              }}
+            >
+              BookConnect
+            </span>
+          </Link>
         </div>
 
         <h2 className="login-title">Welcome back</h2>
@@ -90,7 +84,6 @@ const LoginPage = () => {
                 id="email"
                 name="email"
                 type="email"
-                autoComplete="email"
                 required
                 value={formData.email}
                 onChange={handleChange}
@@ -109,7 +102,6 @@ const LoginPage = () => {
                 id="password"
                 name="password"
                 type="password"
-                autoComplete="current-password"
                 required
                 value={formData.password}
                 onChange={handleChange}
@@ -124,7 +116,7 @@ const LoginPage = () => {
 
           <div className="form-options">
             <label className="remember-me">
-              <input type="checkbox" id="remember-me" name="remember-me" />
+              <input type="checkbox" id="remember-me" />
               <span>Remember me</span>
             </label>
             <a href="#" className="forgot-password">
@@ -148,26 +140,25 @@ const LoginPage = () => {
           <div className="demo-divider">
             <span>Demo credentials</span>
           </div>
-
           <div className="demo-buttons">
             <button
-              onClick={() => {
+              onClick={() =>
                 setFormData({
                   email: "author@example.com",
                   password: "password123",
-                });
-              }}
+                })
+              }
               className="btn-demo"
             >
               Author Demo
             </button>
             <button
-              onClick={() => {
+              onClick={() =>
                 setFormData({
                   email: "reader@example.com",
                   password: "password123",
-                });
-              }}
+                })
+              }
               className="btn-demo"
             >
               Reader Demo
