@@ -88,7 +88,7 @@ Ensure that the following tools and services are available on your system:
 
 ```bash
 git clone https://github.com/henvicodes/Finalyear-BOOKCONNECT.git
-cd bookconnect
+cd Finalyear-BOOKCONNECT
 ```
 
 ### 2. Backend Setup
