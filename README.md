@@ -87,11 +87,9 @@ Ensure that the following tools and services are available on your system:
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/your-username/bookconnect.git
+git clone https://github.com/henvicodes/Finalyear-BOOKCONNECT.git
 cd bookconnect
 ```
-
-> Replace `your-username` with the actual GitHub username or organization hosting the repository.
 
 ### 2. Backend Setup
 
