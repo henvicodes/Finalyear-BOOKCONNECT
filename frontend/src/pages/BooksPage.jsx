@@ -88,7 +88,6 @@ const BooksPage = () => {
       <div className="container">
         <h1 className="books-page-title">All Books</h1>
 
-        {/* Search and Filters */}
         <div className="books-filters">
           <form onSubmit={handleSearch} className="search-form">
             <div className="search-input-wrapper">
@@ -121,7 +120,6 @@ const BooksPage = () => {
           </div>
         </div>
 
-        {/* Books Grid */}
         {loading ? (
           <div className="books-loading">
             <div className="loading-spinner"></div>
@@ -155,32 +153,31 @@ const BooksPage = () => {
                       <img src={book.coverImage} alt={book.title} />
                     ) : (
                       <div className="book-card-cover-placeholder">
-                        <BookOpen size={32} />
+                        <BookOpen size={24} />
                       </div>
                     )}
                   </div>
                   <div className="book-card-info">
                     <h3 className="book-card-title">{book.title}</h3>
                     <p className="book-card-author">
-                      by {book.author?.name || "Unknown"}
+                      {book.author?.name || "Unknown"}
                     </p>
-                    {book.averageRating > 0 && (
-                      <div className="book-card-rating">
-                        <Star size={14} className="star-filled" />
-                        <span>{book.averageRating}</span>
-                        <span className="book-card-reviews">
-                          ({book.totalRatings}{" "}
-                          {book.totalRatings === 1 ? "review" : "reviews"})
+                    <div className="book-card-footer">
+                      {book.averageRating > 0 ? (
+                        <span className="book-card-rating">
+                          <Star size={12} className="star-filled" />
+                          {book.averageRating}
                         </span>
-                      </div>
-                    )}
-                    <span className="book-card-genre">{book.genre}</span>
+                      ) : (
+                        <span className="book-card-no-rating">New</span>
+                      )}
+                      <span className="book-card-genre">{book.genre}</span>
+                    </div>
                   </div>
                 </Link>
               ))}
             </div>
 
-            {/* Pagination */}
             {pagination.pages > 1 && (
               <div className="pagination">
                 <button

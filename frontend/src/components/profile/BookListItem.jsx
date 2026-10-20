@@ -22,7 +22,15 @@ const BookListItem = ({ book, showStatus = false, showRating = true }) => {
   return (
     <div className="book-list-item">
       <div className="book-cover-placeholder">
-        <BookOpen size={18} />
+        {book.coverImage ? (
+          <img
+            src={book.coverImage}
+            alt={book.title}
+            className="book-cover-img"
+          />
+        ) : (
+          <BookOpen size={18} />
+        )}
       </div>
       <div className="book-list-info">
         <span className="book-list-title">{book.title}</span>
