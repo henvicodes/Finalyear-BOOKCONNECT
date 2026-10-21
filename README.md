@@ -21,7 +21,7 @@ MERN stack (MongoDB, Express, React, Node) + Socket.io for real-time chat + Web3
 - **Wallet & payments** — an in-app USD-style wallet balance; P2P transfers between users with a linked MetaMask wallet move real Sepolia ETH and record the payment on-chain in one atomic transaction via `PaymentLedger.makePayment` (see note below)
 - **Recommendations** — a hybrid of content-based TF-IDF similarity and item-based collaborative filtering ("readers who liked X also liked this") computed live from BookConnect's own ratings and purchases (`backend/utils/itemCF.js`; the same method that won the offline Goodbooks-10k comparison in `ml/`). With too little rating data it quietly falls back to content-only, then to trending
 - **Publisher decisions** — a publisher can read the draft, make an offer, or decline with a reason; the author is told and can send the manuscript to someone else
-- **Admin dashboard** — overview (users, books, money, items needing attention), user management (search, suspend/reinstate, change role), publisher verification review, content moderation (unpublish/delete with a reason, similarity-flagged manuscripts), a read-only payments list, platform health (stuck submissions, failed payments) and an audit log of every admin action. Admin routes are `/api/admin/*` and admin-only
+- **Admin dashboard** — an overview with a headline figure, KPI tiles with change vs the previous period, trend charts (money by type, sign-ups, new books; 7/30/90 days, each with a table view), top books/earners/publishers and a live activity feed; plus user management (search, suspend/reinstate, change role), publisher verification review, content moderation (unpublish/delete with a reason, similarity-flagged manuscripts), a read-only payments list, platform health (stuck submissions, failed payments) and an audit log of every admin action. Admin routes are `/api/admin/*` and admin-only
 - **Publisher verification** — a publisher submits a company name, a registration number (CIN, LLPIN, GSTIN, Udyam, or an ISBN-13 of one of their books — format-checked, GSTIN also check-digit-checked) and a document link; an admin looks the number up on the official register, then approves or rejects. Approval sets the Verified badge authors see and stores a SHA-256 fingerprint of what was approved. Nobody can verify themselves
 - **Real-time chat** — Socket.io messaging between authors/readers/publishers, plus a built-in AI assistant contact
 - **Light/dark theme** — a full design-system token system with a persisted toggle
@@ -92,6 +92,17 @@ node scripts/createAdmin.js you@example.com "Your Name"
 ```
 
 The password is typed at a hidden prompt, not on the command line. Run it with an existing account's email to promote that account instead (its password is unchanged).
+
+### Seeing the admin dashboard with data (optional)
+A demo script fills a separate database with 90 days of sample users, books and payments so the charts have something to show. It refuses to run unless the database name ends in `_demo`, and wipes that database first, so it can never touch real data:
+
+```bash
+cd backend
+MONGO_URI=mongodb://localhost:27017/bookConnect_demo node scripts/seedAdminDemo.js
+MONGO_URI=mongodb://localhost:27017/bookConnect_demo npm start
+```
+
+Then log in as `demo-admin@example.com` / `DemoAdmin123` (demo database only).
 
 ### Seed data (optional)
 

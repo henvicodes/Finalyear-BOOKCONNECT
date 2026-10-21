@@ -2,15 +2,17 @@ import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import {
   BookOpen, Users, Shield, BarChart2, DollarSign, Activity, ScrollText, LogOut,
-  AlertCircle, CheckCircle, Search, FileWarning,
+  AlertCircle, CheckCircle, Search, FileWarning, UserPlus, Menu,
 } from "lucide-react";
 import ThemeToggle from "../components/ThemeToggle";
 import HelpTip from "../components/HelpTip";
+import { ChartCard, Legend, TimeChart, TimeTable, HBars, SegmentBar, Sparkline, Delta } from "../components/admin/charts";
+import { compact, money } from "../components/admin/format";
 import "../styles/admin.css";
+import "../styles/adminViz.css";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
-const money = (n) => `$${Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 const when = (d) => (d ? new Date(d).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : "—");
 const errorOf = (err, fallback) => err.response?.data?.message || fallback;
 
@@ -22,16 +24,6 @@ const LOOKUPS = {
   UDYAM: { label: "Udyam verification", url: "https://udyamregistration.gov.in/Udyam_Verify.aspx" },
   ISBN_PREFIX: { label: "ISBN agency (isbn.gov.in)", url: "https://isbn.gov.in/" },
 };
-
-const StatCard = ({ icon, label, value, color }) => (
-  <div className="stat-card">
-    <div className="stat-icon" style={{ background: color + "1a", color }}>{icon}</div>
-    <div className="stat-info">
-      <div className="stat-value">{value ?? "—"}</div>
-      <div className="stat-label">{label}</div>
-    </div>
-  </div>
-);
 
 const Pill = ({ tone = "", children }) => <span className={`admin-pill ${tone}`}>{children}</span>;
 
@@ -54,95 +46,196 @@ const Heading = ({ title, text }) => (
 );
 
 // ───────────────────────── Overview ─────────────────────────
+const MONEY_SERIES = [
+  { key: "book_purchase", label: "Book purchases", color: "var(--viz-s1)" },
+  { key: "publishing_fee", label: "Publishing fees", color: "var(--viz-s2)" },
+  { key: "p2p_transfer", label: "Transfers", color: "var(--viz-s3)" },
+];
+const SIGNUP_SERIES = [{ key: "value", label: "New users", color: "var(--viz-s1)" }];
+const BOOK_SERIES = [{ key: "value", label: "New books", color: "var(--viz-s1)" }];
+const ROLE_COLORS = { reader: "var(--viz-s1)", author: "var(--viz-s2)", publisher: "var(--viz-s3)", admin: "var(--viz-s4)" };
+const FEED_ICON = { signup: UserPlus, payment: DollarSign, admin: ScrollText, verification: Shield };
+
+const ago = (d) => {
+  const mins = Math.max(1, Math.round((Date.now() - new Date(d)) / 60000));
+  if (mins < 60) return `${mins} min ago`;
+  if (mins < 1440) return `${Math.round(mins / 60)} h ago`;
+  return `${Math.round(mins / 1440)} d ago`;
+};
+
 const Overview = ({ go }) => {
+  const [days, setDays] = useState(30);
   const [data, setData] = useState(null);
+  const [health, setHealth] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  const changeRange = (d) => {
+    setLoading(true); // keep the old charts on screen, dimmed, while the new range loads
+    setDays(d);
+  };
+
   useEffect(() => {
-    axios.get(`${BASE_URL}/api/admin/overview`)
-      .then((r) => setData(r.data.data))
-      .catch((e) => setError(errorOf(e, "Could not load the overview.")));
-  }, []);
+    let cancelled = false;
+    Promise.all([
+      axios.get(`${BASE_URL}/api/admin/analytics`, { params: { days } }),
+      axios.get(`${BASE_URL}/api/admin/overview`),
+    ])
+      .then(([a, o]) => {
+        if (cancelled) return;
+        setData(a.data.data);
+        setHealth(o.data.data);
+        setError("");
+      })
+      .catch((e) => !cancelled && setError(errorOf(e, "Could not load the overview.")))
+      .finally(() => !cancelled && setLoading(false));
+    return () => { cancelled = true; };
+  }, [days]);
 
-  if (error) return <p style={{ color: "var(--danger)" }}>{error}</p>;
-  if (!data) return <p style={{ color: "var(--text-muted)" }}>Loading…</p>;
+  if (error && !data) return <p style={{ color: "var(--danger)" }}>{error}</p>;
+  if (!data || !health) return <p style={{ color: "var(--text-muted)" }}>Loading…</p>;
 
-  const h = data.health;
+  const k = data.kpis;
+  const h = health.health;
   const attention = [
     { label: "Publishers waiting for verification", value: h.pendingVerifications, tab: "verification" },
     { label: "Manuscripts flagged for similarity", value: h.flaggedManuscripts, tab: "content", hint: "flagged" },
     { label: "Failed payments", value: h.failedPayments, tab: "health" },
     { label: "Awaiting a publisher's review", value: h.awaitingReview, tab: "health" },
     { label: "Offers waiting for the author", value: h.openOffers, tab: "health" },
-    { label: "Declined submissions", value: h.declined, tab: "health" },
   ];
-  const maxBooks = Math.max(1, ...Object.values(data.booksByStatus));
+  const typeTotals = MONEY_SERIES.map((s) => ({ ...s, total: data.money.reduce((n, d) => n + d[s.key], 0) }));
+  const onChainShare = k.payments.value ? Math.round((k.payments.onChain / k.payments.value) * 100) : 0;
+  const roleSegments = Object.entries(data.usersByRole).map(([role, value]) => ({ key: role, label: role.charAt(0).toUpperCase() + role.slice(1) + "s", value, color: ROLE_COLORS[role] || "var(--viz-muted)" }))
+    .sort((a, b) => b.value - a.value);
+  const statusRows = Object.entries(health.booksByStatus)
+    .map(([status, value]) => ({ key: status, label: status.replace("_", " "), value }))
+    .sort((a, b) => b.value - a.value);
 
   return (
     <>
-      <Heading title="Overview" text="A quick look at how the platform is doing and what needs you." />
-      <div className="stats-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 14, marginBottom: 20 }}>
-        <StatCard icon={<Users size={20} />} label={`Users (+${data.newUsersThisWeek} this week)`} value={data.totalUsers} color="var(--info)" />
-        <StatCard icon={<BookOpen size={20} />} label="Books" value={data.totalBooks} color="var(--accent-600)" />
-        <StatCard icon={<DollarSign size={20} />} label={`Money moved (${data.totalTransactions} payments)`} value={money(data.totalMoneyMoved)} color="var(--success)" />
-        <StatCard icon={<Shield size={20} />} label="Payments recorded on-chain" value={data.onChainTransactions} color="var(--warning)" />
+      <div className="ov-head">
+        <div>
+          <h1>Overview</h1>
+          <p>How BookConnect is doing, and what needs you.</p>
+        </div>
+        <div className="seg" role="group" aria-label="Time range">
+          {[7, 30, 90].map((d) => (
+            <button key={d} aria-pressed={days === d} onClick={() => changeRange(d)}>Last {d} days</button>
+          ))}
+        </div>
       </div>
 
-      <h3 style={{ fontSize: 14, margin: "0 0 10px" }}>Needs attention</h3>
-      <div className="admin-grid">
-        {attention.map((a) => (
-          <button key={a.label} className={`admin-attention ${a.value > 0 ? "hot" : ""}`} onClick={() => go(a.tab, a.hint)}>
-            <strong>{a.value}</strong>
-            <span>{a.label}</span>
-          </button>
-        ))}
-      </div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 16 }}>
-        <div className="glass-panel admin-card">
-          <h3 style={{ fontSize: 14, margin: "0 0 12px" }}>Users by role</h3>
-          {Object.entries(data.usersByRole).map(([role, n]) => (
-            <div key={role} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "4px 0", textTransform: "capitalize" }}>
-              <span>{role}s</span><strong>{n}</strong>
+      <div className={loading ? "ov-loading" : ""}>
+        {/* Hero + KPI tiles */}
+        <div className="viz-hero">
+          <section className="viz viz-card viz-hero-main">
+            <span className="viz-eyebrow">Money moved · last {days} days</span>
+            <span className="viz-hero-figure">{money(k.moneyMoved.value)}</span>
+            <div className="viz-hero-foot">
+              <Delta change={k.moneyMoved.change} />
+              <Sparkline values={k.moneyMoved.series.slice(-Math.min(days, 30))} width={120} height={32} />
             </div>
-          ))}
-          {data.suspendedUsers > 0 && (
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "4px 0", color: "var(--danger)" }}>
-              <span>Suspended</span><strong>{data.suspendedUsers}</strong>
-            </div>
-          )}
+          </section>
+          <div className="viz-kpis">
+            <section className="viz viz-card viz-kpi">
+              <span className="viz-eyebrow">New users</span>
+              <span className="viz-kpi-value">{compact(k.newUsers.value)}</span>
+              <Delta change={k.newUsers.change} />
+              <Sparkline values={k.newUsers.series} />
+            </section>
+            <section className="viz viz-card viz-kpi">
+              <span className="viz-eyebrow">New books</span>
+              <span className="viz-kpi-value">{compact(k.newBooks.value)}</span>
+              <Delta change={k.newBooks.change} />
+              <Sparkline values={k.newBooks.series} />
+            </section>
+            <section className="viz viz-card viz-kpi">
+              <span className="viz-eyebrow">Payments</span>
+              <span className="viz-kpi-value">{compact(k.payments.value)}</span>
+              <Delta change={k.payments.change} />
+              <span className="viz-eyebrow">{onChainShare}% recorded on-chain</span>
+            </section>
+          </div>
         </div>
 
-        <div className="glass-panel admin-card">
-          <h3 style={{ fontSize: 14, margin: "0 0 12px" }}>Books by status</h3>
-          {Object.entries(data.booksByStatus).map(([status, n]) => (
-            <div key={status} style={{ marginBottom: 8, fontSize: 12 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", textTransform: "capitalize", marginBottom: 3 }}>
-                <span>{status.replace("_", " ")}</span><strong>{n}</strong>
-              </div>
-              <div className="admin-bar"><div style={{ width: `${(n / maxBooks) * 100}%` }} /></div>
-            </div>
-          ))}
-        </div>
-
-        <div className="glass-panel admin-card">
-          <h3 style={{ fontSize: 14, margin: "0 0 12px" }}>Money by type</h3>
-          {Object.keys(data.moneyByType).length === 0 && <p style={{ fontSize: 12, color: "var(--text-muted)" }}>No payments yet.</p>}
-          {Object.entries(data.moneyByType).map(([type, m]) => (
-            <div key={type} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "4px 0", textTransform: "capitalize" }}>
-              <span>{type.replace("_", " ")} ({m.count})</span><strong>{money(m.total)}</strong>
-            </div>
+        <h2 className="ov-section-title">Needs attention</h2>
+        <div className="admin-grid">
+          {attention.map((a) => (
+            <button key={a.label} className={`admin-attention ${a.value > 0 ? "hot" : ""}`} onClick={() => go(a.tab, a.hint)}>
+              <strong>{a.value}</strong>
+              <span>{a.label}</span>
+            </button>
           ))}
         </div>
 
-        <div className="glass-panel admin-card">
-          <h3 style={{ fontSize: 14, margin: "0 0 12px" }}>Recent sign-ups</h3>
-          {data.recentUsers.map((u) => (
-            <div key={u._id} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "4px 0", gap: 8 }}>
-              <span>{u.name} <Pill>{u.role}</Pill></span>
-              <span style={{ color: "var(--text-muted)" }}>{when(u.createdAt)}</span>
-            </div>
-          ))}
+        <h2 className="ov-section-title">Trends</h2>
+        <div className="ov-grid two">
+          <div className="ov-wide">
+            <ChartCard
+              title="Money moved per day"
+              subtitle={`Completed payments, by type · ${money(typeTotals.reduce((n, t) => n + t.total, 0))} total`}
+              legend={<Legend items={typeTotals.map((t) => ({ key: t.key, label: `${t.label} · ${money(t.total)}`, color: t.color }))} />}
+              table={<TimeTable data={data.money} series={MONEY_SERIES} format={money} />}
+            >
+              <TimeChart data={data.money} series={MONEY_SERIES} format={money} height={240} />
+            </ChartCard>
+          </div>
+          <ChartCard title="New users per day" subtitle={`${k.newUsers.value} joined in the last ${days} days`} table={<TimeTable data={data.signups} series={SIGNUP_SERIES} />}>
+            <TimeChart data={data.signups} series={SIGNUP_SERIES} height={190} />
+          </ChartCard>
+          <ChartCard title="New books per day" subtitle={`${k.newBooks.value} created in the last ${days} days`} table={<TimeTable data={data.newBooks} series={BOOK_SERIES} />}>
+            <TimeChart data={data.newBooks} series={BOOK_SERIES} height={190} kind="line" />
+          </ChartCard>
+        </div>
+
+        <h2 className="ov-section-title">The platform right now</h2>
+        <div className="ov-grid">
+          <ChartCard title="Who is on BookConnect" subtitle={`${health.totalUsers} accounts${health.suspendedUsers ? ` · ${health.suspendedUsers} suspended` : ""}`}>
+            <SegmentBar segments={roleSegments} />
+          </ChartCard>
+          <ChartCard title="Books by status" subtitle={`${health.totalBooks} books in total`}>
+            <HBars rows={statusRows} />
+          </ChartCard>
+          <ChartCard title="Most-read books" subtitle="Published books, by reads">
+            <HBars rows={data.topBooks.map((b) => ({ key: b._id, label: b.title, value: b.totalReads, hint: `${b.author?.name || ""} · ${b.averageRating || 0}★ from ${b.totalRatings} ratings` }))} empty="No published books yet." />
+          </ChartCard>
+          <ChartCard title="Top earners" subtitle="Authors, by earnings">
+            <HBars
+              rows={data.topAuthors.map((u) => ({ key: u._id, label: u.name, value: u.earnings }))}
+              format={money}
+              empty="No earnings yet."
+            />
+          </ChartCard>
+          <ChartCard title="Top publishers" subtitle="By fees earned">
+            <HBars
+              rows={data.topPublishers.map((u) => ({
+                key: u._id,
+                label: u.name,
+                value: u.earnings,
+                badge: u.publisherVerification?.isVerified ? <Pill tone="good">verified</Pill> : null,
+              }))}
+              format={money}
+              empty="No fees earned yet."
+            />
+          </ChartCard>
+          <section className="viz viz-card">
+            <header className="viz-card-head"><div><h3>Latest activity</h3><p>Sign-ups, payments and admin actions</p></div></header>
+            {data.activity.length === 0 ? <p className="viz-empty">Nothing yet.</p> : (
+              <ul className="feed">
+                {data.activity.map((e, i) => {
+                  const Icon = FEED_ICON[e.kind] || Activity;
+                  return (
+                    <li key={i}>
+                      <span className="feed-icon">{React.createElement(Icon, { size: 14 })}</span>
+                      <span>{e.text}</span>
+                      <time>{ago(e.at)}</time>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
         </div>
       </div>
     </>
@@ -631,15 +724,29 @@ const TABS = [
 const AdminDashboard = ({ user, onLogout }) => {
   const [tab, setTab] = useState("overview");
   const [flaggedFirst, setFlaggedFirst] = useState(false);
+  const [badges, setBadges] = useState({});
+  const [menuOpen, setMenuOpen] = useState(false); // sidebar drawer on phones
+
+  // counts shown on the sidebar; refreshed whenever the admin switches tab
+  useEffect(() => {
+    axios.get(`${BASE_URL}/api/admin/overview`)
+      .then((r) => {
+        const h = r.data.data.health;
+        setBadges({ verification: h.pendingVerifications, content: h.flaggedManuscripts, health: h.failedPayments });
+      })
+      .catch(() => {});
+  }, [tab]);
 
   const go = (id, hint) => {
     setFlaggedFirst(hint === "flagged");
     setTab(id);
+    setMenuOpen(false);
   };
 
   return (
-    <div className="dashboard-wrapper">
-      <aside className="sidebar">
+    <div className="dashboard-wrapper admin-shell">
+      {menuOpen && <div className="sidebar-overlay" onClick={() => setMenuOpen(false)} />}
+      <aside className={`sidebar ${menuOpen ? "open" : ""}`}>
         <div className="sidebar-header">
           <div className="sidebar-logo"><BookOpen size={22} /><span>BookConnect</span></div>
         </div>
@@ -654,6 +761,7 @@ const AdminDashboard = ({ user, onLogout }) => {
           {TABS.map(({ id, label, icon }) => (
             <button key={id} className={`sidebar-link ${tab === id ? "active" : ""}`} onClick={() => go(id)}>
               {React.createElement(icon, { size: 18 })}<span>{label}</span>
+              {badges[id] > 0 && <span className="nav-badge">{badges[id]}</span>}
             </button>
           ))}
         </nav>
@@ -662,7 +770,10 @@ const AdminDashboard = ({ user, onLogout }) => {
 
       <div className="dashboard-main">
         <header className="dash-topbar" style={{ justifyContent: "flex-end", gap: 12 }}>
-          <span style={{ fontSize: 12, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 6 }}>
+          <button className="menu-btn" onClick={() => setMenuOpen(true)} aria-label="Open menu" style={{ marginRight: "auto" }}>
+            <Menu size={20} />
+          </button>
+          <span className="admin-note" style={{ fontSize: 12, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 6 }}>
             <AlertCircle size={14} /> Admin actions are recorded in the audit log
           </span>
           <ThemeToggle />

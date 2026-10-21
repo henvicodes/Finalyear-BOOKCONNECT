@@ -225,6 +225,35 @@ describe("Admin API", () => {
     });
   });
 
+  describe("analytics", () => {
+    it("returns zero-filled daily series for the chosen range, with KPIs and top lists", async () => {
+      const res = await request(app).get("/api/admin/analytics?days=7").set(auth(adminToken));
+      expect(res.status).toBe(200);
+      const d = res.body.data;
+      expect(d.days).toBe(7);
+      expect(d.signups).toHaveLength(7);
+      expect(d.money).toHaveLength(7);
+      // dates are consecutive, oldest first, ending today (UTC)
+      expect(d.signups[6].date).toBe(new Date().toISOString().slice(0, 10));
+      // everything in this test file was created today
+      expect(d.kpis.newUsers.value).toBe(d.signups.reduce((n, s) => n + s.value, 0));
+      expect(d.kpis.newUsers.value).toBeGreaterThanOrEqual(4);
+      expect(d.kpis.newUsers.change).toBeNull(); // nothing in the previous period to compare against
+      expect(d.kpis.moneyMoved.value).toBe(30); // the completed purchase; the failed transfer is excluded
+      expect(d.money[6].book_purchase).toBe(30);
+      expect(d.moneyTypes).toEqual(["book_purchase", "publishing_fee", "p2p_transfer"]);
+      expect(d.activity.length).toBeGreaterThan(0);
+      expect(JSON.stringify(d)).not.toMatch(/password|walletPin|otp/i);
+    });
+
+    it("falls back to 30 days for an unsupported range and is admin-only", async () => {
+      const odd = await request(app).get("/api/admin/analytics?days=9999").set(auth(adminToken));
+      expect(odd.body.data.days).toBe(30);
+      expect(odd.body.data.signups).toHaveLength(30);
+      expect((await request(app).get("/api/admin/analytics").set(auth(readerToken))).status).toBe(403);
+    });
+  });
+
   describe("transactions and health", () => {
     it("lists payments with filters and a total, read-only", async () => {
       const all = await request(app).get("/api/admin/transactions").set(auth(adminToken));

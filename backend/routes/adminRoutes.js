@@ -79,6 +79,127 @@ router.get("/overview", async (req, res) => {
   }
 });
 
+// ───────────────────────── Analytics (trends + KPIs) ─────────────────────────
+const DAY = 24 * 60 * 60 * 1000;
+const dayKey = (d) => new Date(d).toISOString().slice(0, 10); // UTC day, YYYY-MM-DD
+const startOfUtcDay = (d) => new Date(dayKey(d) + "T00:00:00.000Z");
+
+// Every day in [start, start + days) with a zero where nothing happened.
+const dayRange = (start, days) => Array.from({ length: days }, (_, i) => dayKey(new Date(start.getTime() + i * DAY)));
+
+// % change vs the previous period; null when there is nothing to compare against.
+const pctChange = (now, before) => (before > 0 ? Math.round(((now - before) / before) * 1000) / 10 : null);
+
+router.get("/analytics", async (req, res) => {
+  try {
+    const days = [7, 30, 90].includes(parseInt(req.query.days, 10)) ? parseInt(req.query.days, 10) : 30;
+    const start = new Date(startOfUtcDay(Date.now()).getTime() - (days - 1) * DAY);
+    const prevStart = new Date(start.getTime() - days * DAY);
+    const labels = dayRange(start, days);
+
+    const perDay = (field) => [
+      { $match: { [field]: { $gte: start } } },
+      { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: `$${field}`, timezone: "UTC" } }, count: { $sum: 1 } } },
+    ];
+
+    const [signupRows, bookRows, moneyRows, curMoney, prevMoney, prevUsers, prevBooks, topBooks, topAuthors, topPublishers, roleRows, recentUsers, recentTx, recentAudit, recentVerif] =
+      await Promise.all([
+        User.aggregate(perDay("createdAt")),
+        Book.aggregate(perDay("createdAt")),
+        Transaction.aggregate([
+          { $match: { createdAt: { $gte: start }, status: "completed" } },
+          {
+            $group: {
+              _id: { day: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt", timezone: "UTC" } }, type: "$type" },
+              amount: { $sum: "$amount" },
+              count: { $sum: 1 },
+            },
+          },
+        ]),
+        Transaction.aggregate([
+          { $match: { createdAt: { $gte: start }, status: "completed" } },
+          { $group: { _id: null, amount: { $sum: "$amount" }, count: { $sum: 1 }, onChain: { $sum: { $cond: ["$onChain", 1, 0] } } } },
+        ]),
+        Transaction.aggregate([
+          { $match: { createdAt: { $gte: prevStart, $lt: start }, status: "completed" } },
+          { $group: { _id: null, amount: { $sum: "$amount" }, count: { $sum: 1 } } },
+        ]),
+        User.countDocuments({ createdAt: { $gte: prevStart, $lt: start } }),
+        Book.countDocuments({ createdAt: { $gte: prevStart, $lt: start } }),
+        Book.find({ status: "published" }).sort("-totalReads -totalRatings").limit(5)
+          .select("title totalReads averageRating totalRatings isPaid price").populate("author", "name"),
+        User.find({ role: "author", earnings: { $gt: 0 } }).sort("-earnings").limit(5).select("name earnings"),
+        User.find({ role: "publisher", earnings: { $gt: 0 } }).sort("-earnings").limit(5).select("name earnings publisherVerification.isVerified"),
+        User.aggregate([{ $group: { _id: "$role", count: { $sum: 1 } } }]),
+        User.find().sort("-createdAt").limit(6).select("name role createdAt"),
+        Transaction.find().sort("-createdAt").limit(6).populate("sender", "name").populate("receiver", "name"),
+        AuditLog.find().sort("-createdAt").limit(6).populate("admin", "name"),
+        User.find({ role: "publisher", "publisherVerification.status": "pending" }).sort("-publisherVerification.submittedAt").limit(4)
+          .select("name publisherVerification.companyName publisherVerification.submittedAt"),
+      ]);
+
+    const signupMap = Object.fromEntries(signupRows.map((r) => [r._id, r.count]));
+    const bookMap = Object.fromEntries(bookRows.map((r) => [r._id, r.count]));
+    const TYPES = ["book_purchase", "publishing_fee", "p2p_transfer"];
+    const moneyMap = {};
+    for (const r of moneyRows) (moneyMap[r._id.day] ||= {})[r._id.type] = { amount: r.amount, count: r.count };
+
+    const signups = labels.map((d) => ({ date: d, value: signupMap[d] || 0 }));
+    const newBooks = labels.map((d) => ({ date: d, value: bookMap[d] || 0 }));
+    const money = labels.map((d) => ({
+      date: d,
+      ...Object.fromEntries(TYPES.map((t) => [t, moneyMap[d]?.[t]?.amount || 0])),
+    }));
+
+    const cur = curMoney[0] || { amount: 0, count: 0, onChain: 0 };
+    const prev = prevMoney[0] || { amount: 0, count: 0 };
+    const sum = (rows) => rows.reduce((n, r) => n + r.value, 0);
+
+    // One merged "what just happened" feed.
+    const activity = [
+      ...recentUsers.map((u) => ({ at: u.createdAt, kind: "signup", text: `${u.name} joined as a ${u.role}` })),
+      ...recentTx.map((t) => ({
+        at: t.createdAt,
+        kind: "payment",
+        text: `${t.sender?.name || "Someone"} paid ${t.receiver?.name || "someone"} $${t.amount} (${t.type.replace("_", " ")})${t.status === "failed" ? " - failed" : ""}`,
+      })),
+      ...recentAudit.map((a) => ({ at: a.createdAt, kind: "admin", text: `${a.admin?.name || "Admin"}: ${a.action}${a.targetLabel ? ` - ${a.targetLabel}` : ""}` })),
+      ...recentVerif.map((u) => ({ at: u.publisherVerification.submittedAt, kind: "verification", text: `${u.publisherVerification.companyName || u.name} asked to be verified` })),
+    ]
+      .filter((e) => e.at)
+      .sort((a, b) => new Date(b.at) - new Date(a.at))
+      .slice(0, 10);
+
+    res.json({
+      success: true,
+      data: {
+        days,
+        signups,
+        newBooks,
+        money,
+        moneyTypes: TYPES,
+        kpis: {
+          newUsers: { value: sum(signups), change: pctChange(sum(signups), prevUsers), series: signups.map((s) => s.value) },
+          newBooks: { value: sum(newBooks), change: pctChange(sum(newBooks), prevBooks), series: newBooks.map((s) => s.value) },
+          moneyMoved: {
+            value: cur.amount,
+            change: pctChange(cur.amount, prev.amount),
+            series: money.map((m) => TYPES.reduce((n, t) => n + m[t], 0)),
+          },
+          payments: { value: cur.count, change: pctChange(cur.count, prev.count), onChain: cur.onChain },
+        },
+        usersByRole: Object.fromEntries(roleRows.map((r) => [r._id, r.count])),
+        topBooks,
+        topAuthors,
+        topPublishers,
+        activity,
+      },
+    });
+  } catch (e) {
+    serverError(res, "Admin analytics")(e);
+  }
+});
+
 // Counts of things that need an admin's attention.
 async function healthNumbers() {
   const [pendingVerifications, awaitingReview, openOffers, declined, failedPayments, flagged] = await Promise.all([

@@ -166,3 +166,27 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* clearer "you are here" in the admin sidebar */
+.admin-shell .sidebar-link.active {
+  background: color-mix(in srgb, var(--accent-600) 12%, transparent);
+  color: var(--accent-600);
+  border-color: color-mix(in srgb, var(--accent-600) 28%, transparent);
+}
+.admin-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--bg-primary);
+  z-index: 1;
+}
+.admin-card h3 {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+@media (max-width: 700px) {
+  .admin-note {
+    display: none !important;
+  }
+}
