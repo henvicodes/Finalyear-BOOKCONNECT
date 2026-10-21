@@ -8,11 +8,13 @@ import {
   MessageCircle, Award, Zap, Globe, PenTool, Search,
   BarChart2, Clock, CheckCircle, AlertCircle, Plus,
   BookMarked, Layers, DollarSign, UserCheck, FileText,
-  Hash, Lock, Sparkles, ArrowUpRight, Menu, X
+  Hash, Lock, Sparkles, ArrowUpRight, Menu, X, HelpCircle
 } from "lucide-react";
 import SearchBar from "../components/SearchBar";
+import FeatureGuide from "../components/FeatureGuide";
+import HelpTip from "../components/HelpTip";
 import WalletPinModal from "../components/WalletPinModal";
-import { sendMetaMaskTransaction } from "../services/web3";
+import { payOnChainIfLinked } from "../services/chainPayment";
 import "./Dashboard.css";
 import {
   AuthorOverview,
@@ -42,6 +44,7 @@ const Sidebar = ({ role, active, setActive, onLogout, user, sidebarOpen, setSide
     { id: "messages",   icon: <MessageCircle size={18} />, label: "Messages" },
     { id: "analytics",  icon: <TrendingUp size={18} />,    label: "Analytics" },
     { id: "settings",   icon: <Settings size={18} />,      label: "Settings" },
+    { id: "help",       icon: <HelpCircle size={18} />,    label: "Help & Guide" },
   ];
   const readerLinks = [
     { id: "overview", icon: <BarChart2 size={18} />,  label: "Overview" },
@@ -114,6 +117,10 @@ const Sidebar = ({ role, active, setActive, onLogout, user, sidebarOpen, setSide
         }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: "bold" }}>Wallet Balance</span>
+            <HelpTip
+              title="Wallet balance"
+              text="Your in-app money, used to buy books and pay publishing fees. It is hidden by default — click the eye and enter your PIN to see it."
+            />
             <button
               onClick={() => showBalance ? setShowBalance(false) : setPinModalOpen(true)}
               style={{ background: "none", border: "none", color: roleColor, cursor: "pointer", padding: 0 }}
@@ -197,38 +204,36 @@ const Dashboard = () => {
     setPayCostPinOpen(true);
   };
 
-  const handlePayCostAfterPin = async () => {
+  const handlePayCostAfterPin = async (pin) => {
     const bookId = payingBookId;
     setPayCostPinOpen(false);
     setPayingBookId(null);
     try {
-      // Find publisher wallet address from book data if available
       const book = books.find(b => (b._id || b.id) === bookId);
-      const publisherWalletAddr =
-        book?.publisher?.blockchainWallet?.address ||
-        book?.publisher?.walletAddress ||
-        "0x0000000000000000000000000000000000000000";
       const publishingCost = book?.publishingCost || 0;
 
-      // Attempt MetaMask transaction (proportional ETH: $1 = 0.0001 ETH)
       let txHash = "";
-      if (publishingCost > 0) {
-        const ethVal = (publishingCost * 0.0001).toFixed(5);
-        try {
-          txHash = await sendMetaMaskTransaction(publisherWalletAddr, ethVal);
-        } catch (metamaskErr) {
-          alert("MetaMask transaction failed: " + metamaskErr.message);
-          return;
-        }
+      try {
+        ({ txHash } = await payOnChainIfLinked({
+          payer: user,
+          receiver: book?.publisher,
+          amountUsd: publishingCost,
+          purpose: "publishing_fee",
+        }));
+      } catch (metamaskErr) {
+        alert("MetaMask transaction failed: " + metamaskErr.message);
+        return;
       }
 
       const { data } = await axios.post(
         `${BASE_URL}/api/manuscripts/${bookId}/pay-cost`,
-        { txHash },
+        { txHash, pin },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (data.success) {
-        alert(`Payment verified on Blockchain ledger${txHash ? " (Tx: " + txHash.slice(0, 12) + "...)" : ""}. Book published successfully!`);
+        const note = data.chainWarning ? `
+(${data.chainWarning})` : "";
+        alert(`Payment complete${txHash ? " (Tx: " + txHash.slice(0, 12) + "...)" : ""}. Book published successfully!${note}`);
         if (data.walletBalance !== undefined) {
           updateUserFields({ walletBalance: data.walletBalance });
         }
@@ -300,6 +305,14 @@ const Dashboard = () => {
     }
     if (active === "settings") {
       return <AuthorSettings user={user} token={token} />;
+    }
+    if (active === "help") {
+      return (
+        <FeatureGuide
+          role="author"
+          onGo={(target) => (target.tab ? setActive(target.tab) : navigate(target.path))}
+        />
+      );
     }
     return (
       <div className="dash-content coming-soon">

@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { initSocket, getSocket } from "../services/socket";
 import WalletPinModal from "./WalletPinModal";
-import { sendMetaMaskTransaction } from "../services/web3";
+import { payOnChainIfLinked } from "../services/chainPayment";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 const AI_BOT_ID = "0000000000000000000000aa";
@@ -65,11 +65,9 @@ const ChatInterface = ({ user, currentRole, token, initialContact }) => {
   // 1. Initialize Socket.io connection & fetch conversations on mount
   useEffect(() => {
     if (user?._id) {
-      const socket = initSocket(user._id);
-
-      socket.on("connect", () => {
-        socket.emit("join_room", user._id);
-      });
+      // The server reads who we are from the login token sent in the handshake.
+      const socket = initSocket();
+      if (!socket) return undefined;
 
       socket.on("online_users", (users) => {
         setOnlineUsers(users);
@@ -408,35 +406,35 @@ const ChatInterface = ({ user, currentRole, token, initialContact }) => {
     setPayCostPinOpen(true);
   };
 
-  const handlePayCostAfterPin = async () => {
+  const handlePayCostAfterPin = async (pin) => {
     const bookId = payingBookId;
     setPayCostPinOpen(false);
     setPayingBookId(null);
     try {
-      const publisherWalletAddr =
-        payingBook?.publisher?.blockchainWallet?.address ||
-        payingBook?.publisher?.walletAddress ||
-        "0x0000000000000000000000000000000000000000";
       const publishingCost = payingBook?.publishingCost || 0;
 
       let txHash = "";
-      if (publishingCost > 0) {
-        const ethVal = (publishingCost * 0.0001).toFixed(5);
-        try {
-          txHash = await sendMetaMaskTransaction(publisherWalletAddr, ethVal);
-        } catch (metamaskErr) {
-          alert("MetaMask transaction failed: " + metamaskErr.message);
-          return;
-        }
+      try {
+        ({ txHash } = await payOnChainIfLinked({
+          payer: user,
+          receiver: payingBook?.publisher,
+          amountUsd: publishingCost,
+          purpose: "publishing_fee",
+        }));
+      } catch (metamaskErr) {
+        alert("MetaMask transaction failed: " + metamaskErr.message);
+        return;
       }
 
       const res = await axios.post(
         `${BASE_URL}/api/manuscripts/${bookId}/pay-cost`,
-        { txHash },
+        { txHash, pin },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (res.data.success) {
-        alert(`Payment verified on Blockchain ledger${txHash ? " (Tx: " + txHash.slice(0, 12) + "...)" : ""}. Book published successfully!`);
+        const note = res.data.chainWarning ? `
+(${res.data.chainWarning})` : "";
+        alert(`Payment complete${txHash ? " (Tx: " + txHash.slice(0, 12) + "...)" : ""}. Book published successfully!${note}`);
         fetchMessages(selectedContact._id);
       }
     } catch (err) {

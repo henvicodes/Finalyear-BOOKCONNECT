@@ -5,6 +5,7 @@ const { protect } = require("../middleware/authMiddleware");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const Anthropic = require("@anthropic-ai/sdk");
 const { tokenize, computeIDF, tfidfVector, cosineSimilarity } = require("../utils/textSimilarity");
+const { scoreGenres, knownWordCount, getModelInfo } = require("../utils/genreClassifier");
 
 // Helper to count syllables in a word
 function countSyllables(word) {
@@ -67,6 +68,15 @@ router.post("/evaluate/:id", protect, async (req, res) => {
     const book = await Book.findById(req.params.id);
     if (!book) {
       return res.status(404).json({ success: false, message: "Manuscript not found" });
+    }
+
+    // Evaluating saves scores onto the book, so only its author or the
+    // publisher it was sent to may run it.
+    const uid = req.user._id.toString();
+    const isOwner = book.author.toString() === uid;
+    const isAssignedPublisher = book.publisher && book.publisher.toString() === uid;
+    if (!isOwner && !isAssignedPublisher) {
+      return res.status(403).json({ success: false, message: "Not authorized to evaluate this manuscript" });
     }
 
     const text = book.content || book.description || "";
@@ -281,6 +291,25 @@ const SUPPORTED_LANGUAGES = {
   spanish: "es", french: "fr", german: "de", chinese: "zh", japanese: "ja",
   arabic: "ar", english: "en",
 };
+
+// 3b. POST /api/ai/suggest-genre -> Genre suggestions from a trained model.
+// Uses the classifier trained on the CMU Book Summary Dataset
+// (see ml/train_genre_classifier.py) — a real trained model, not a heuristic.
+router.post("/suggest-genre", protect, (req, res) => {
+  const { text } = req.body;
+  // The model can only judge text it has vocabulary for; with a couple of
+  // words it would still return numbers, just meaningless ones.
+  if (!text || knownWordCount(text) < 25) {
+    return res.status(400).json({
+      success: false,
+      message: "Write or paste a longer passage (a paragraph or more) so a genre can be suggested.",
+    });
+  }
+  const suggestions = scoreGenres(text)
+    .slice(0, 3)
+    .map((s) => ({ genre: s.genre, probability: Math.round(s.probability * 1000) / 1000 }));
+  res.json({ success: true, suggestions, model: getModelInfo() });
+});
 
 // 4. POST /api/ai/translate -> Translate text from a source language to a target language
 router.post("/translate", protect, async (req, res) => {

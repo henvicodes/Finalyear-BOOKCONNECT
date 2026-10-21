@@ -12,6 +12,8 @@ MERN stack (MongoDB, Express, React, Node) + Socket.io for real-time chat + Web3
 - **Plagiarism detection** — TF-IDF + cosine similarity against other published manuscripts' actual text (see [`backend/utils/textSimilarity.js`](backend/utils/textSimilarity.js))
 - **Personalized recommendations** — content-based filtering (TF-IDF + cosine similarity) over a reader's purchase/rating history and stated interests, at `/recommendations`
 - **Reader–writer/publisher matching** — profile-similarity matching (same TF-IDF approach applied to bios/interests) at `/matching`
+- **Built-in help** — a "Help & Guide" tab in every dashboard (where each feature is, with "Take me there" buttons, a searchable list, and a plain-language glossary), a first-visit welcome tour, and small "?" tips beside the confusing parts (wallet PIN, MetaMask, Sepolia testnet, publishing fee). All wording lives in [`frontend/src/content/helpContent.jsx`](frontend/src/content/helpContent.jsx)
+- **Trained ML models** (see [`ml/`](ml/README.md)) — a genre classifier trained on the CMU Book Summary Dataset (78.7% top-1 / 93.7% top-3 on held-out books; used live via the "Suggest genre" button), and a collaborative-filtering recommender trained and evaluated on Goodbooks-10k (≈3× the ranking quality of a "most-liked" baseline; not yet wired into the live app — see the ml README for why)
 - **Weighted book ranking** — `Final Score = α·UserRating + β·AIQualityScore + γ·EngagementScore`, computed via a MongoDB aggregation pipeline (`sort=ranked` on `GET /api/books`)
 - **Manuscript version history** — a SHA-256 content-hash snapshot recorded on every create/edit/publish, viewable in the Author Dashboard's Blockchain tab
 - **Multilingual translation** — Claude if configured, else Gemini, else the free MyMemory API — translate any chapter into Hindi, Marathi, Bengali, Tamil, Telugu, Gujarati, Kannada, Malayalam, Punjabi, Spanish, French, German, Chinese, Japanese, or Arabic
@@ -29,6 +31,16 @@ Two parts of this app are genuinely on-chain, and one is a fingerprint stored in
 - **Simulated ledger (MongoDB, not a distributed ledger):** the default "manuscript registered on the blockchain" flow (`POST /api/blockchain/register/:id`) and version-history snapshots compute a SHA-256 hash and store it in Mongo — a genuine content fingerprint, but not a write to Ethereum. Off-chain-only wallet transfers (when the recipient hasn't linked a wallet yet) are recorded the same way, clearly marked `onChain: false` in the transaction ledger rather than given a fake-looking hash.
 
 Both contracts' source is in [`blockchain/contracts/`](blockchain/contracts), with Hardhat tests in [`blockchain/test/`](blockchain/test).
+
+**The server never trusts a transaction hash from the browser.** It looks the transaction up on Sepolia (read-only, via `SEPOLIA_RPC_URL`) and only marks a payment `onChain: true` if it is a real `PaymentLedger` payment between the two users' linked wallets; a manuscript registration is only recorded if it really came from the author's wallet in `ManuscriptRegistry`. Each hash can be used once. The backend holds no private key and signs nothing. Set `SEPOLIA_RPC_URL`, `PAYMENT_LEDGER_ADDRESS` and `MANUSCRIPT_REGISTRY_ADDRESS` in `backend/.env` (see `backend/.env.example`).
+
+### Security measures
+- **Passwords** bcrypt-hashed; **wallet PIN** bcrypt-hashed, 5 wrong tries lock it for 15 minutes, and changing/resetting it needs the current PIN or the account password (`backend/scripts/hashExistingPins.js` upgrades any old plain-text PINs)
+- **Sign-up codes (OTP)** stored only as a SHA-256 hash, compared in constant time, burned after 5 wrong guesses; login requires a verified e-mail; codes are only printed to the console outside production
+- **Money moves are atomic**: balances change with guarded single-document updates (`backend/utils/wallet.js`), so parallel requests can't double-spend, and a failed step is rolled back. Paying (book purchase, publishing fee, transfer) requires the wallet PIN
+- **Chat sockets** need the login JWT in the handshake; the user id comes from the verified token
+- Rate limiting on login / OTP / wallet routes, `helmet` headers, a sanitizer that strips MongoDB operators from input, 7-day JWTs, and no internal error text sent to the browser
+- Known limits: the JWT is kept in `localStorage` (no refresh-token / httpOnly cookie yet); the "quality score" is a readability formula, not AI; standalone MongoDB has no multi-document transactions, so atomicity relies on guarded updates and compensation
 
 ## Project structure
 
@@ -82,7 +94,7 @@ cd backend
 npm test
 ```
 
-See [`backend/tests`](backend/tests) for coverage of auth, the publishing workflow, and purchases.
+See [`backend/tests`](backend/tests) for coverage of auth, the publishing workflow, purchases, the genre classifier, and security (OTP/PIN lockouts, atomic payments, on-chain verification with a mocked chain, ownership checks, authenticated sockets).
 
 ## Tech stack
 

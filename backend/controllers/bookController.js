@@ -11,14 +11,17 @@ const getBooks = async (req, res) => {
     const {
       search,
       genre,
-      status = "published",
       page = 1,
       limit = 12,
       sort = "-createdAt",
       author,
     } = req.query;
 
-    const query = { status };
+    // This public list only ever shows PUBLISHED books. It used to honour a
+    // ?status= filter, which let anyone list other people's drafts and
+    // manuscripts under review (publishers have their own inbox:
+    // GET /api/manuscripts/submissions).
+    const query = { status: "published" };
 
     if (genre) query.genre = genre;
     if (author) query.author = author;
@@ -339,7 +342,7 @@ const rateBook = async (req, res) => {
   try {
     const { rating, review } = req.body;
 
-    if (!rating || rating < 1 || rating > 5) {
+    if (!Number.isFinite(Number(rating)) || rating < 1 || rating > 5) {
       return res
         .status(400)
         .json({ success: false, message: "Rating must be between 1 and 5" });
@@ -353,6 +356,20 @@ const rateBook = async (req, res) => {
         .json({ success: false, message: "Book not found" });
     }
 
+    if (book.status !== "published") {
+      return res.status(404).json({ success: false, message: "Book not found" });
+    }
+    if (book.author.toString() === req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: "You cannot rate your own book." });
+    }
+    // Paid books can only be rated by people who bought them.
+    if (book.isPaid && (book.price || 0) > 0) {
+      const owns = (req.user.purchasedBooks || []).some((id) => id.toString() === book._id.toString());
+      if (!owns) {
+        return res.status(403).json({ success: false, message: "Buy this book to rate it." });
+      }
+    }
+
     // if user already rated
     const existingRating = book.ratings.find(
       (r) => r.user.toString() === req.user._id.toString(),
@@ -360,9 +377,9 @@ const rateBook = async (req, res) => {
 
     if (existingRating) {
       existingRating.rating = rating;
-      existingRating.review = review || existingRating.review;
+      existingRating.review = typeof review === "string" ? review.slice(0, 1000) : existingRating.review;
     } else {
-      book.ratings.push({ user: req.user._id, rating, review });
+      book.ratings.push({ user: req.user._id, rating: Number(rating), review: typeof review === "string" ? review.slice(0, 1000) : undefined });
     }
 
     await book.save();
@@ -434,13 +451,26 @@ const getChapterContent = async (req, res) => {
     const { id, chapterId } = req.params;
 
     const book = await Book.findById(id)
-      .select("title author chapters isPaid price")
+      .select("title author chapters isPaid price status publisher")
       .populate("author", "name");
 
     if (!book) {
       return res
         .status(404)
         .json({ success: false, message: "Book not found" });
+    }
+
+    // A manuscript that isn't published yet is private: only its author and
+    // the publisher the author sent it to may read it.
+    if (book.status !== "published") {
+      const uid = req.user?._id?.toString();
+      const isAuthor = uid && book.author?._id?.toString() === uid;
+      const isAssignedPublisher = uid && book.publisher?.toString() === uid;
+      if (!isAuthor && !isAssignedPublisher) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Book not found" });
+      }
     }
 
     const chapter = book.chapters.id(chapterId);

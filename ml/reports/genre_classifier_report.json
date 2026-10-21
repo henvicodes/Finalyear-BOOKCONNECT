@@ -1,0 +1,89 @@
+{
+  "dataset": "CMU Book Summary Dataset (16,559 books, CC BY-SA)",
+  "usable_books": 9334,
+  "train_books": 7467,
+  "test_books": 1867,
+  "genres": [
+    "fantasy",
+    "science",
+    "mystery",
+    "thriller",
+    "horror",
+    "romance",
+    "history",
+    "biography",
+    "children",
+    "non-fiction"
+  ],
+  "vocabulary_size": 20000,
+  "metrics": {
+    "top1_hit_rate": 0.787,
+    "top3_hit_rate": 0.937,
+    "baseline_always_predict_science_top1": 0.305,
+    "micro_f1": 0.702,
+    "macro_f1": 0.63
+  },
+  "per_genre": {
+    "fantasy": {
+      "support": 487,
+      "precision": 0.778,
+      "recall": 0.747,
+      "f1": 0.762
+    },
+    "science": {
+      "support": 569,
+      "precision": 0.838,
+      "recall": 0.782,
+      "f1": 0.809
+    },
+    "mystery": {
+      "support": 367,
+      "precision": 0.796,
+      "recall": 0.711,
+      "f1": 0.751
+    },
+    "thriller": {
+      "support": 273,
+      "precision": 0.625,
+      "recall": 0.579,
+      "f1": 0.601
+    },
+    "horror": {
+      "support": 128,
+      "precision": 0.765,
+      "recall": 0.484,
+      "f1": 0.593
+    },
+    "romance": {
+      "support": 85,
+      "precision": 0.471,
+      "recall": 0.388,
+      "f1": 0.426
+    },
+    "history": {
+      "support": 176,
+      "precision": 0.624,
+      "recall": 0.642,
+      "f1": 0.633
+    },
+    "biography": {
+      "support": 56,
+      "precision": 0.585,
+      "recall": 0.429,
+      "f1": 0.495
+    },
+    "children": {
+      "support": 425,
+      "precision": 0.671,
+      "recall": 0.666,
+      "f1": 0.668
+    },
+    "non-fiction": {
+      "support": 61,
+      "precision": 0.674,
+      "recall": 0.475,
+      "f1": 0.558
+    }
+  },
+  "trained_seconds": 5.5
+}

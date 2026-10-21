@@ -17,6 +17,7 @@ import { connectMetaMask, isMetaMaskInstalled } from "../../services/web3";
 import { makePaymentOnChain } from "../../services/paymentLedger";
 import { useAuth } from "../../context/AuthContext";
 import WalletPinModal from "../WalletPinModal";
+import HelpTip from "../HelpTip";
 import "../../styles/ProfilePage.css";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
@@ -254,6 +255,10 @@ const WalletCard = ({ user }) => {
           <div>
             <span className="wallet-label" style={{ fontSize: 15, fontWeight: "bold", color: "var(--text-primary)", display: "block" }}>
               {isLinked ? "MetaMask Wallet Connected" : "No Crypto Wallet Linked"}
+              <HelpTip
+                title="What is MetaMask?"
+                text="A free browser extension that works as a crypto wallet. It is optional — you only need it for the blockchain features. Linking it does not move any money."
+              />
             </span>
             <span className="wallet-sub" style={{ fontSize: 12, color: "var(--text-secondary)", fontFamily: "monospace" }}>
               {isLinked ? `${walletAddress.slice(0, 10)}...${walletAddress.slice(-6)}` : "Connect MetaMask for Web3 transactions"}
@@ -453,7 +458,12 @@ const WalletCard = ({ user }) => {
                 <Send size={24} />
               </div>
               <h3 style={{ fontSize: 18, fontWeight: 700, margin: "0 0 6px 0" }}>Web3 P2P Balance Transfer</h3>
-              <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>Transfer funds securely to another author, reader, or publisher.</p>
+              <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>Transfer funds securely to another author, reader, or publisher.
+                <HelpTip
+                  title="How the payment is recorded"
+                  text="Your in-app balance always moves. If the other person has linked MetaMask, a small test-ETH payment is also sent and recorded on the Sepolia practice blockchain (it has no real money value). If they have not, it is an in-app transfer only."
+                />
+              </p>
             </div>
 
             {/* Recipient Search or Display */}

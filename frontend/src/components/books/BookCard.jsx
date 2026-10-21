@@ -14,7 +14,10 @@ const BookCard = ({ book }) => {
             <BookOpen size={32} />
           </div>
         )}
-        <span className={`book-card-price-badge ${book.isPaid ? "paid" : "free"}`}>
+        <span
+          className={`book-card-price-badge ${book.isPaid ? "paid" : "free"}`}
+          title={book.isPaid ? "Paid book — chapters unlock after you buy it" : "Free book — you can read it right away"}
+        >
           {book.isPaid ? `$${book.price}` : "Free"}
         </span>
       </div>

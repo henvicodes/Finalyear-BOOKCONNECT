@@ -7,6 +7,8 @@ import {
 } from "lucide-react";
 import ChatInterface from "../components/ChatInterface";
 import ThemeToggle from "../components/ThemeToggle";
+import WelcomeBanner from "../components/WelcomeBanner";
+import HelpTip from "../components/HelpTip";
 import ChapterManager from "../components/books/ChapterManager";
 import confetti from "canvas-confetti";
 import { useAuth } from "../context/AuthContext";
@@ -87,6 +89,78 @@ const CoverPreview = ({ url }) => {
       <span style={{ fontSize: 11, color: failed ? "var(--danger)" : "var(--text-muted)" }}>
         {failed ? "This URL didn't load — double-check the link." : "This is what will be saved as the cover."}
       </span>
+    </div>
+  );
+};
+
+// Every genre the Book model accepts (backend/models/Book.js).
+const BOOK_GENRES = [
+  "fiction", "non-fiction", "science", "technology", "poetry", "drama", "history",
+  "biography", "mystery", "romance", "thriller", "fantasy", "horror", "children",
+];
+
+// "Suggest genre" — asks the trained genre classifier (backend
+// POST /api/ai/suggest-genre; TF-IDF + logistic regression trained on the
+// CMU Book Summary Dataset) to read the manuscript text and offer its top 3
+// genres. The author stays in control: clicking a chip just fills the select.
+const GenreSuggester = ({ text, token, onPick }) => {
+  const [loading, setLoading] = useState(false);
+  const [suggestions, setSuggestions] = useState(null);
+  const [error, setError] = useState("");
+
+  const suggest = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const { data } = await axios.post(
+        `${BASE_URL}/api/ai/suggest-genre`,
+        { text },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setSuggestions(data.suggestions);
+    } catch (err) {
+      setSuggestions(null);
+      setError(err.response?.data?.message || "Could not get a suggestion right now.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{ marginTop: 6 }}>
+      <button
+        type="button"
+        onClick={suggest}
+        disabled={loading}
+        style={{
+          background: "none", border: "none", padding: 0, cursor: loading ? "wait" : "pointer",
+          fontSize: 12, fontWeight: 600, color: "var(--accent-600)", display: "inline-flex", alignItems: "center", gap: 4
+        }}
+      >
+        <Sparkles size={12} /> {loading ? "Reading your manuscript..." : "Suggest genre from my text"}
+      </button>
+      {error && <div style={{ fontSize: 11, color: "var(--danger)", marginTop: 4 }}>{error}</div>}
+      {suggestions && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6, alignItems: "center" }}>
+          {suggestions.map(s => (
+            <button
+              key={s.genre}
+              type="button"
+              onClick={() => onPick(s.genre)}
+              title="Click to use this genre"
+              style={{
+                padding: "3px 10px", fontSize: 11, borderRadius: 20, cursor: "pointer", textTransform: "capitalize",
+                border: "1px solid var(--accent-200)", background: "var(--accent-50)", color: "var(--accent-700)", fontWeight: 600
+              }}
+            >
+              {s.genre} · {Math.round(s.probability * 100)}%
+            </button>
+          ))}
+          <span style={{ fontSize: 10, color: "var(--text-muted)" }}>
+            Trained model — a suggestion only.
+          </span>
+        </div>
+      )}
     </div>
   );
 };
@@ -344,11 +418,13 @@ export const AuthorOverview = ({ user, setActive, books, loading, setEditingBook
         </button>
       </div>
 
+      <WelcomeBanner role="author" userId={user?._id} onOpenGuide={() => setActive("help")} />
+
       <div className="stats-row">
         <StatCard icon={<BookOpen size={20} />} label="Total Books" value={loading ? "…" : books.length} color="var(--accent-600)" />
         <StatCard icon={<Eye size={20} />} label="Total Reads" value={loading ? "…" : fmt(totalReads)} color="var(--info)" />
         <StatCard icon={<CheckCircle size={20} />} label="Published" value={loading ? "…" : publishedBooks.length} color="var(--success)" />
-        <StatCard icon={<Star size={20} />} label="Avg Quality Score" value={loading ? "…" : avgRating} color="var(--warning)" />
+        <StatCard icon={<Star size={20} />} label="Avg Readability Score" value={loading ? "…" : avgRating} color="var(--warning)" />
       </div>
 
       {!loading && books.length > 0 && (
@@ -485,12 +561,12 @@ export const AuthorMyBooks = ({ books, loading, setActive, setEditingBookId, onP
 
                 <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
                   <span className={`book-status ${b.status === "published" ? "published" : b.status === "under_review" || b.status === "seen" || b.status === "cost_proposed" ? "review" : "draft"}`}>
-                    {b.status === "published" ? "Published" : b.status === "under_review" ? "Reviewing" : b.status === "seen" ? "Seen" : b.status === "cost_proposed" ? "Proposed" : "Draft"}
+                    {b.status === "published" ? "Published" : b.status === "under_review" ? "Reviewing" : b.status === "seen" ? "Read by publisher" : b.status === "cost_proposed" ? "Offer received" : "Draft"}
                   </span>
                   
                   {b.status === "cost_proposed" && (
                     <span style={{ fontSize: 11, fontWeight: "bold", color: "var(--warning)" }}>
-                      Proposed fee: ${b.publishingCost}
+                      Publisher's offer: ${b.publishingCost}
                     </span>
                   )}
 
@@ -670,20 +746,21 @@ export const AuthorUploadBook = ({ token, setActive, fetchBooks }) => {
               <div>
                 <label className="form-label">Genre</label>
                 <select className="input-field" value={genre} onChange={e => setGenre(e.target.value)} style={{ textTransform: "capitalize" }}>
-                  <option value="fiction">Fiction</option>
-                  <option value="non-fiction">Non-Fiction</option>
-                  <option value="science">Science</option>
-                  <option value="technology">Technology</option>
-                  <option value="poetry">Poetry</option>
-                  <option value="mystery">Mystery</option>
-                  <option value="romance">Romance</option>
+                  {BOOK_GENRES.map(g => <option key={g} value={g}>{g}</option>)}
                 </select>
+                <GenreSuggester text={content} token={token} onPick={setGenre} />
               </div>
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
               <div>
-                <label className="form-label">Select Target Publisher</label>
+                <label className="form-label">
+                  Select Target Publisher
+                  <HelpTip
+                    title="What happens next?"
+                    text="The publisher reviews your manuscript and may propose a publishing fee. You pay it from your wallet balance and the book goes live."
+                  />
+                </label>
                 <select className="input-field" value={selectedPublisher} onChange={e => setSelectedPublisher(e.target.value)}>
                   <option value="">-- Choose Publisher --</option>
                   {publishers.map(p => (
@@ -943,20 +1020,21 @@ export const AuthorEditBook = ({ token, bookId, setActive, fetchBooks }) => {
               <div>
                 <label className="form-label">Genre</label>
                 <select className="input-field" value={genre} onChange={e => setGenre(e.target.value)} style={{ textTransform: "capitalize" }}>
-                  <option value="fiction">Fiction</option>
-                  <option value="non-fiction">Non-Fiction</option>
-                  <option value="science">Science</option>
-                  <option value="technology">Technology</option>
-                  <option value="poetry">Poetry</option>
-                  <option value="mystery">Mystery</option>
-                  <option value="romance">Romance</option>
+                  {BOOK_GENRES.map(g => <option key={g} value={g}>{g}</option>)}
                 </select>
+                <GenreSuggester text={content} token={token} onPick={setGenre} />
               </div>
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
               <div>
-                <label className="form-label">Select Publisher</label>
+                <label className="form-label">
+                  Select Publisher
+                  <HelpTip
+                    title="What happens next?"
+                    text="The publisher reviews your manuscript and may propose a publishing fee. You pay it from your wallet balance and the book goes live."
+                  />
+                </label>
                 <select className="input-field" value={selectedPublisher} onChange={e => setSelectedPublisher(e.target.value)}>
                   <option value="">-- Choose Publisher --</option>
                   {publishers.map(p => (
@@ -1262,7 +1340,13 @@ export const AuthorBlockchain = ({ token, books, user, fetchBooks }) => {
         <div className="blockchain-status" style={{ border: "1px solid rgba(79, 70, 229, 0.2)" }}>
           <div className="chain-icon"><Wallet size={32} color="var(--accent-600)" /></div>
           <div style={{ flex: 1 }}>
-            <h3>Web3 Ledger Integration</h3>
+            <h3>
+              Web3 Ledger Integration
+              <HelpTip
+                title="What is this for?"
+                text="Lets you prove you wrote a manuscript by a certain date. A fingerprint of your text is saved — your story itself is not published. MetaMask is needed for the public-blockchain option."
+              />
+            </h3>
             {walletConnected ? (
               <p className="chain-ok" style={{ color: "var(--success)", display: "flex", alignItems: "center", gap: 6 }}>
                 <CheckCircle size={14} /> Connected: {walletAddress.slice(0, 8)}...{walletAddress.slice(-6)}
@@ -1444,6 +1528,10 @@ export const AuthorBlockchain = ({ token, books, user, fetchBooks }) => {
               <div className="panel-header">
                 <h3 style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <Shield size={16} color="var(--accent-600)" /> Real Blockchain Anchor (Sepolia Testnet)
+                  <HelpTip
+                    title="What is Sepolia?"
+                    text="A practice version of Ethereum — nothing on it has real money value. You need a little free test ETH for the fee (search for a Sepolia faucet)."
+                  />
                 </h3>
               </div>
 
@@ -1520,7 +1608,13 @@ export const AuthorBlockchain = ({ token, books, user, fetchBooks }) => {
         {/* Version History — transparent, content-hashed edit timeline */}
         <div className="dash-panel" style={{ marginTop: 20 }}>
           <div className="panel-header">
-            <h3>Version History</h3>
+            <h3>
+              Version History
+              <HelpTip
+                title="What is this?"
+                text="A timeline of saved versions of your manuscript. Each has its own fingerprint, so you can see when the text changed."
+              />
+            </h3>
           </div>
           {(() => {
             const selectedBook = books.find(b => (b._id || b.id) === selectedBookId);

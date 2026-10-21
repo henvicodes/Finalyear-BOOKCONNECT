@@ -1,7 +1,18 @@
 const User = require("../models/User");
 const generateToken = require("../utils/generateToken");
-const { generateOTP, generateOTPExpiry } = require("../utils/otpGenerator");
-const { sendOTPEmail } = require("../services/emailService");
+const { generateOTP, generateOTPExpiry, hashOTP, otpMatches, MAX_OTP_ATTEMPTS } = require("../utils/otpGenerator");
+// Used as a module object (not destructured) so tests can replace sendOTPEmail.
+const emailService = require("../services/emailService");
+
+// In development, when SMTP isn't working, print the code so sign-up can still be
+// tested. Never in production — a log file is not a safe place for a login code.
+const logOtpForDev = (email, otp, what) => {
+  if (process.env.NODE_ENV === "production") return;
+  console.log("=========================================");
+  console.log(`[DEV ONLY] Could not send the ${what} email to ${email}`);
+  console.log(`Verification code: ${otp}`);
+  console.log("=========================================");
+};
 
 // Send OTP
 const sendRegistrationOTP = async (req, res) => {
@@ -32,9 +43,9 @@ const sendRegistrationOTP = async (req, res) => {
       existingUser.name = name;
       existingUser.password = password;
       existingUser.role = role || "reader";
-      existingUser.otpCode = otp;
+      existingUser.otpCode = hashOTP(otp);
       existingUser.otpExpiry = otpExpiry;
-      existingUser.tempRegistrationData = { name, email, password, role };
+      existingUser.otpAttempts = 0;
 
       await existingUser.save();
     } else {
@@ -44,10 +55,10 @@ const sendRegistrationOTP = async (req, res) => {
         email,
         password,
         role: role || "reader",
-        otpCode: otp,
+        otpCode: hashOTP(otp),
         otpExpiry: otpExpiry,
+        otpAttempts: 0,
         isEmailVerified: false,
-        tempRegistrationData: { name, email, password, role },
       });
 
       await newUser.save();
@@ -56,13 +67,10 @@ const sendRegistrationOTP = async (req, res) => {
 
     // Send OTP via email
     try {
-      await sendOTPEmail(email, name, otp);
+      await emailService.sendOTPEmail(email, name, otp);
       console.log("OTP email sent successfully");
     } catch (emailError) {
-      console.log("=========================================");
-      console.log(`[DEV MODE ONLY] Failed to send SMTP email to ${email}`);
-      console.log(`Your verification OTP code is: ${otp}`);
-      console.log("=========================================");
+      logOtpForDev(email, otp, "verification");
     }
 
     res.status(200).json({
@@ -85,14 +93,12 @@ const sendRegistrationOTP = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Validation error",
-        error: error.message,
       });
     }
 
     res.status(500).json({
       success: false,
       message: "Failed to send OTP",
-      error: error.message,
     });
   }
 };
@@ -101,10 +107,13 @@ const sendRegistrationOTP = async (req, res) => {
 const verifyOTPAndRegister = async (req, res) => {
   try {
     const { email, otp } = req.body;
+    if (typeof email !== "string" || typeof otp !== "string") {
+      return res.status(400).json({ success: false, message: "Email and OTP are required" });
+    }
 
     // Find user by email
     const user = await User.findOne({ email }).select(
-      "+otpCode +otpExpiry +tempRegistrationData +password",
+      "+otpCode +otpExpiry +otpAttempts +password",
     );
 
     if (!user) {
@@ -122,11 +131,25 @@ const verifyOTPAndRegister = async (req, res) => {
       });
     }
 
-    // Verify OTP
-    if (!user.otpCode || user.otpCode !== otp) {
+    // Too many wrong guesses: the code is burned and a new one must be requested.
+    if ((user.otpAttempts || 0) >= MAX_OTP_ATTEMPTS) {
+      return res.status(429).json({
+        success: false,
+        message: "Too many wrong codes. Please request a new one.",
+      });
+    }
+
+    // Verify OTP (hash compared in constant time)
+    if (!otpMatches(user.otpCode, otp)) {
+      const updated = await User.findByIdAndUpdate(
+        user._id, { $inc: { otpAttempts: 1 } }, { new: true }
+      ).select("+otpAttempts");
+      const left = MAX_OTP_ATTEMPTS - (updated.otpAttempts || 0);
       return res.status(400).json({
         success: false,
-        message: "Invalid OTP code",
+        message: left > 0
+          ? `Invalid OTP code. ${left} attempt${left === 1 ? "" : "s"} left.`
+          : "Too many wrong codes. Please request a new one.",
       });
     }
 
@@ -142,7 +165,7 @@ const verifyOTPAndRegister = async (req, res) => {
     user.isEmailVerified = true;
     user.otpCode = undefined;
     user.otpExpiry = undefined;
-    user.tempRegistrationData = undefined;
+    user.otpAttempts = undefined;
 
     await user.save();
 
@@ -166,7 +189,6 @@ const verifyOTPAndRegister = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Server error",
-      error: error.message,
     });
   }
 };
@@ -175,9 +197,12 @@ const verifyOTPAndRegister = async (req, res) => {
 const resendOTP = async (req, res) => {
   try {
     const { email } = req.body;
+    if (typeof email !== "string") {
+      return res.status(400).json({ success: false, message: "Email is required" });
+    }
 
     const user = await User.findOne({ email }).select(
-      "+otpCode +otpExpiry +tempRegistrationData",
+      "+otpCode +otpExpiry +otpAttempts",
     );
 
     if (!user) {
@@ -199,19 +224,17 @@ const resendOTP = async (req, res) => {
     const otpExpiry = generateOTPExpiry(10);
 
     // Update user with new OTP
-    user.otpCode = otp;
+    user.otpCode = hashOTP(otp);
     user.otpExpiry = otpExpiry;
+    user.otpAttempts = 0;
 
     await user.save();
 
     // Send new OTP via email
     try {
-      await sendOTPEmail(email, user.name, otp);
+      await emailService.sendOTPEmail(email, user.name, otp);
     } catch (emailError) {
-      console.log("=========================================");
-      console.log(`[DEV MODE ONLY] Failed to resend SMTP email to ${email}`);
-      console.log(`Your verification OTP code is: ${otp}`);
-      console.log("=========================================");
+      logOtpForDev(email, otp, "verification (resend)");
     }
 
     res.status(200).json({
@@ -227,57 +250,6 @@ const resendOTP = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to resend OTP",
-      error: error.message,
-    });
-  }
-};
-
-const registerUser = async (req, res) => {
-  try {
-    const { name, email, password, role } = req.body;
-
-    const userExists = await User.findOne({ email });
-    if (userExists) {
-      return res.status(400).json({
-        success: false,
-        message: "User already exists",
-      });
-    }
-
-    const user = await User.create({
-      name,
-      email,
-      password,
-      role: role || "reader",
-    });
-
-    if (user) {
-      res.status(201).json({
-        success: true,
-        data: {
-          _id: user._id,
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          profilePicture: user.profilePicture,
-          isVerified: user.isVerified,
-          walletBalance: user.walletBalance,
-          earnings: user.earnings,
-          token: generateToken(user._id, user.role),
-        },
-      });
-    } else {
-      res.status(400).json({
-        success: false,
-        message: "Invalid user data",
-      });
-    }
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({
-      success: false,
-      message: "Server error",
-      error: error.message,
     });
   }
 };
@@ -285,6 +257,9 @@ const registerUser = async (req, res) => {
 const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
+    if (typeof email !== "string" || typeof password !== "string") {
+      return res.status(400).json({ success: false, message: "Email and password are required" });
+    }
 
     const user = await User.findOne({ email }).select("+password");
 
@@ -301,6 +276,13 @@ const loginUser = async (req, res) => {
       return res.status(401).json({
         success: false,
         message: "Invalid credentials",
+      });
+    }
+
+    if (!user.isEmailVerified) {
+      return res.status(403).json({
+        success: false,
+        message: "Please verify your email first — finish registration with the code we emailed you.",
       });
     }
 
@@ -323,7 +305,6 @@ const loginUser = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Server error",
-      error: error.message,
     });
   }
 };
@@ -405,6 +386,10 @@ const linkWallet = async (req, res) => {
   try {
     const { walletAddress } = req.body;
 
+    if (typeof walletAddress !== "string" || !/^0x[0-9a-fA-F]{40}$/.test(walletAddress)) {
+      return res.status(400).json({ success: false, message: "A valid wallet address is required" });
+    }
+
     const user = await User.findById(req.user._id);
 
     if (user) {
@@ -458,7 +443,6 @@ module.exports = {
   sendRegistrationOTP,
   verifyOTPAndRegister,
   resendOTP,
-  registerUser,
   loginUser,
   getUserProfile,
   updateUserProfile,

@@ -4,7 +4,6 @@ const {
   sendRegistrationOTP,
   verifyOTPAndRegister,
   resendOTP,
-  registerUser,
   loginUser,
   getUserProfile,
   updateUserProfile,
@@ -23,7 +22,6 @@ const {
 router.post("/send-otp", validateRegister, validate, sendRegistrationOTP);
 router.post("/verify-otp", verifyOTPAndRegister);
 router.post("/resend-otp", resendOTP);
-router.post("/register", validateRegister, validate, registerUser);
 router.post("/login", validateLogin, validate, loginUser);
 
 // Private

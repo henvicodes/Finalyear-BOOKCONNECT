@@ -7,6 +7,10 @@ const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 const WalletPinModal = ({ isOpen, onClose, onSuccess, token, title = "Enter 4-Digit Security PIN" }) => {
   const [pin, setPin] = useState("");
   const [isSetupMode, setIsSetupMode] = useState(false);
+  // "Forgot PIN" resets must prove identity with the account password; the very
+  // first PIN (none set yet) does not need it.
+  const [isReset, setIsReset] = useState(false);
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
@@ -25,6 +29,10 @@ const WalletPinModal = ({ isOpen, onClose, onSuccess, token, title = "Enter 4-Di
       setError("Please enter a complete 4-digit PIN");
       return;
     }
+    if (isSetupMode && isReset && !password) {
+      setError("Enter your account password to reset the PIN");
+      return;
+    }
 
     setLoading(true);
     setError("");
@@ -35,13 +43,15 @@ const WalletPinModal = ({ isOpen, onClose, onSuccess, token, title = "Enter 4-Di
         // Set new 4-digit PIN
         const { data } = await axios.post(
           `${BASE_URL}/api/blockchain/set-pin`,
-          { pin },
+          isReset ? { pin, password } : { pin },
           { headers: { Authorization: `Bearer ${token}` } }
         );
         if (data.success) {
           setSuccessMsg("PIN set successfully!");
           setTimeout(() => {
             setIsSetupMode(false);
+            setIsReset(false);
+            setPassword("");
             setSuccessMsg("");
             onSuccess(pin);
           }, 800);
@@ -62,6 +72,7 @@ const WalletPinModal = ({ isOpen, onClose, onSuccess, token, title = "Enter 4-Di
       const msg = err.response?.data?.message || "Verification failed.";
       if (err.response?.data?.hasPin === false) {
         setIsSetupMode(true);
+        setIsReset(false);
         setError("No PIN configured yet. Please set your 4-digit PIN below.");
       } else {
         setError(msg);
@@ -128,12 +139,17 @@ const WalletPinModal = ({ isOpen, onClose, onSuccess, token, title = "Enter 4-Di
             {isSetupMode ? <KeyRound size={26} /> : <Lock size={26} />}
           </div>
           <h3 style={{ fontSize: 18, fontWeight: 700, margin: "0 0 6px 0" }}>
-            {isSetupMode ? "Setup 4-Digit Security PIN" : title}
+            {isSetupMode ? (isReset ? "Reset Security PIN" : "Setup 4-Digit Security PIN") : title}
           </h3>
           <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>
             {isSetupMode
-              ? "Create a 4-digit PIN to secure your wallet balance & authorize transactions"
+              ? (isReset
+                  ? "Enter your account password, then choose a new 4-digit PIN"
+                  : "Create a 4-digit PIN to secure your wallet balance & authorize transactions")
               : "Enter your PIN to verify authorization"}
+          </p>
+          <p style={{ fontSize: 11, color: "var(--text-muted)", margin: "8px 0 0" }}>
+            This PIN protects your balance and approves payments. It is not your login password.
           </p>
         </div>
 
@@ -198,13 +214,34 @@ const WalletPinModal = ({ isOpen, onClose, onSuccess, token, title = "Enter 4-Di
             ))}
           </div>
 
+          {isSetupMode && isReset && (
+            <input
+              type="password"
+              placeholder="Your account password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => { setPassword(e.target.value); setError(""); }}
+              style={{
+                width: "100%",
+                boxSizing: "border-box",
+                padding: "10px 12px",
+                marginBottom: 16,
+                borderRadius: 10,
+                border: "1px solid color-mix(in srgb, var(--text-primary) 15%, transparent)",
+                background: "var(--bg-primary)",
+                color: "var(--text-primary)",
+                fontSize: 13,
+              }}
+            />
+          )}
+
           <input
             type="password"
             inputMode="numeric"
             maxLength={4}
             value={pin}
             onChange={handlePinChange}
-            autoFocus
+            autoFocus={!(isSetupMode && isReset)}
             style={{
               position: "absolute",
               opacity: 0,
@@ -260,13 +297,13 @@ const WalletPinModal = ({ isOpen, onClose, onSuccess, token, title = "Enter 4-Di
             }}
           >
             <ShieldCheck size={18} />
-            <span>{isSetupMode ? "Set Security PIN" : "Verify & Proceed"}</span>
+            <span>{isSetupMode ? (isReset ? "Reset Security PIN" : "Set Security PIN") : "Verify & Proceed"}</span>
           </button>
 
           {!isSetupMode && (
             <button
               type="button"
-              onClick={() => { setIsSetupMode(true); setPin(""); setError(""); }}
+              onClick={() => { setIsSetupMode(true); setIsReset(true); setPin(""); setPassword(""); setError(""); }}
               style={{
                 background: "none",
                 border: "none",

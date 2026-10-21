@@ -2,6 +2,8 @@ const request = require("supertest");
 const app = require("../app");
 const User = require("../models/User");
 const { connectTestDB, disconnectTestDB } = require("./setup");
+const { lastOtp } = require("./helpers");
+const { hashOTP } = require("../utils/otpGenerator");
 
 beforeAll(connectTestDB);
 afterAll(disconnectTestDB);
@@ -21,11 +23,15 @@ describe("Auth: registration + login", () => {
     expect(res.body.success).toBe(true);
     expect(res.body.data.email).toBe(testUser.email);
 
-    // The OTP is emailed, not returned in the API response — read it
-    // directly from the DB the same way a real email would deliver it.
-    const stored = await User.findOne({ email: testUser.email }).select("+otpCode");
+    // The OTP is emailed (intercepted by the test helper) and only a hash of
+    // it is stored, so a database leak can't be used to log in.
+    const stored = await User.findOne({ email: testUser.email }).select("+otpCode +password");
     expect(stored).not.toBeNull();
-    expect(stored.otpCode).toMatch(/^\d{6}$/);
+    expect(lastOtp(testUser.email)).toMatch(/^\d{6}$/);
+    expect(stored.otpCode).toBe(hashOTP(lastOtp(testUser.email)));
+    expect(stored.otpCode).not.toBe(lastOtp(testUser.email));
+    // and the password is bcrypt-hashed already at this stage
+    expect(stored.password).toMatch(/^\$2[aby]\$/);
     expect(stored.isEmailVerified).toBe(false);
   });
 
@@ -39,11 +45,9 @@ describe("Auth: registration + login", () => {
   });
 
   it("completes registration with the correct OTP and returns a JWT", async () => {
-    const stored = await User.findOne({ email: testUser.email }).select("+otpCode");
-
     const res = await request(app)
       .post("/api/auth/verify-otp")
-      .send({ email: testUser.email, otp: stored.otpCode });
+      .send({ email: testUser.email, otp: lastOtp(testUser.email) });
 
     expect(res.status).toBe(201);
     expect(res.body.success).toBe(true);

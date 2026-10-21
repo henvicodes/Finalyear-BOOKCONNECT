@@ -90,16 +90,24 @@ const userSchema = new mongoose.Schema(
       type: Number,
       default: 1000,
     },
+    // bcrypt hash of the 4-digit wallet PIN (never the PIN itself). Older
+    // accounts may still hold a plain PIN — utils/pin.js upgrades it to a
+    // hash the next time it is verified.
     walletPin: {
       type: String,
       default: null,
+      select: false,
     },
+    pinFailedAttempts: { type: Number, default: 0 },
+    pinLockedUntil: { type: Date, default: null },
     walletAddress: {
       type: String,
       default: "",
     },
     resetPasswordToken: String,
     resetPasswordExpire: Date,
+    // SHA-256 hash of the emailed one-time code (not the code itself), plus
+    // a counter so the 6 digits can't be brute-forced.
     otpCode: {
       type: String,
       select: false,
@@ -108,13 +116,14 @@ const userSchema = new mongoose.Schema(
       type: Date,
       select: false,
     },
+    otpAttempts: {
+      type: Number,
+      default: 0,
+      select: false,
+    },
     isEmailVerified: {
       type: Boolean,
       default: false,
-    },
-    tempRegistrationData: {
-      type: mongoose.Schema.Types.Mixed,
-      select: false,
     },
   },
   {

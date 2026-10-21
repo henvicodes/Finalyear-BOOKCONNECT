@@ -3,8 +3,9 @@ import axios from "axios";
 import {
   BookOpen, Eye, EyeOff, Star, Search, Clock, CheckCircle, Plus, BookMarked, Layers,
   DollarSign, UserCheck, Settings, Heart, AlertCircle, RefreshCw, ChevronRight, Sparkles, LogOut, BarChart2, MessageCircle,
-  Languages, Highlighter, Lock
+  Languages, Highlighter, Lock, HelpCircle
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 // Same language list BookDetail.jsx offers — "english" included so books
 // written in another language can be translated back to English too.
@@ -16,8 +17,11 @@ import RatingStars from "../components/RatingStars";
 import ChatInterface from "../components/ChatInterface";
 import WalletPinModal from "../components/WalletPinModal";
 import ThemeToggle from "../components/ThemeToggle";
+import FeatureGuide from "../components/FeatureGuide";
+import WelcomeBanner from "../components/WelcomeBanner";
+import HelpTip from "../components/HelpTip";
 import { useAuth } from "../context/AuthContext";
-import { sendMetaMaskTransaction } from "../services/web3";
+import { payOnChainIfLinked } from "../services/chainPayment";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
@@ -37,6 +41,7 @@ const StatCard = ({ icon, label, value, color }) => (
 
 const ReaderDashboard = ({ user, token, onLogout }) => {
   const { updateUserFields, updateProfile } = useAuth();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("overview");
   const [library, setLibrary] = useState([]);
   const [showBalance, setShowBalance] = useState(false);
@@ -240,18 +245,18 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
     const isPaid = book.isPaid || book.price > 0;
     if (!isPaid) {
       // Free unlock: no PIN/MetaMask needed, proceed directly
-      executePurchase(book, "");
+      executePurchase(book, "", "");
       return;
     }
     setPendingPurchaseBook(book);
     setPurchasePinOpen(true);
   };
 
-  const executePurchase = async (book, txHash) => {
+  const executePurchase = async (book, txHash, pin) => {
     try {
       const { data } = await axios.post(
         `${BASE_URL}/api/reader/${book._id}/purchase`,
-        { txHash },
+        { txHash, pin },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (data.success) {
@@ -273,28 +278,25 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
     }
   };
 
-  const handlePurchaseAfterPin = async () => {
+  const handlePurchaseAfterPin = async (pin) => {
     const book = pendingPurchaseBook;
     setPurchasePinOpen(false);
     setPendingPurchaseBook(null);
     if (!book) return;
 
-    const authorWalletAddr =
-      book.author?.blockchainWallet?.address ||
-      book.author?.walletAddress ||
-      "0x0000000000000000000000000000000000000000";
-    const price = book.price || 0;
     let txHash = "";
-    if (price > 0) {
-      const ethVal = (price * 0.0001).toFixed(5);
-      try {
-        txHash = await sendMetaMaskTransaction(authorWalletAddr, ethVal);
-      } catch (metamaskErr) {
-        alert("MetaMask transaction failed: " + metamaskErr.message);
-        return;
-      }
+    try {
+      ({ txHash } = await payOnChainIfLinked({
+        payer: user,
+        receiver: book.author,
+        amountUsd: book.price || 0,
+        purpose: "book_purchase",
+      }));
+    } catch (metamaskErr) {
+      alert("MetaMask transaction failed: " + metamaskErr.message);
+      return;
     }
-    await executePurchase(book, txHash);
+    await executePurchase(book, txHash, pin);
   };
 
   // Reading Progress update
@@ -555,6 +557,9 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
           <button className={`sidebar-link ${activeTab === "settings" ? "active" : ""}`} onClick={() => setActiveTab("settings")}>
             <Settings size={18} /><span>Settings</span>
           </button>
+          <button className={`sidebar-link ${activeTab === "help" ? "active" : ""}`} onClick={() => setActiveTab("help")}>
+            <HelpCircle size={18} /><span>Help & Guide</span>
+          </button>
         </nav>
 
         {/* Wallet Balance widget — masked by default (GPay style) */}
@@ -570,6 +575,10 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
         }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ fontSize: 10, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: "bold" }}>Wallet Balance</span>
+            <HelpTip
+              title="Wallet balance"
+              text="Your in-app money, used to buy books and pay publishing fees. It is hidden by default — click the eye and enter your PIN to see it."
+            />
             <button
               onClick={() => showBalance ? setShowBalance(false) : setBalancePinOpen(true)}
               style={{ background: "none", border: "none", color: "var(--success)", cursor: "pointer", padding: 0 }}
@@ -627,6 +636,8 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
                   <Search size={16} /> Browse Marketplace
                 </button>
               </div>
+
+              <WelcomeBanner role="reader" userId={user?._id} onOpenGuide={() => setActiveTab("help")} />
 
               <div className="stats-row">
                 <StatCard icon={<BookOpen size={20} />} label="Library Books" value={library.length} color="var(--success)" />
@@ -1503,6 +1514,14 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
             <div className="dash-content animate-fade-in" style={{ height: "calc(100vh - 120px)" }}>
               <ChatInterface user={user} currentRole="reader" token={token} initialContact={pendingChatContact} />
             </div>
+          )}
+
+          {/* HELP & GUIDE TAB */}
+          {activeTab === "help" && (
+            <FeatureGuide
+              role="reader"
+              onGo={(target) => (target.tab ? setActiveTab(target.tab) : navigate(target.path))}
+            />
           )}
 
           {/* SETTINGS TAB */}

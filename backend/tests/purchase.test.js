@@ -2,16 +2,11 @@ const request = require("supertest");
 const app = require("../app");
 const User = require("../models/User");
 const { connectTestDB, disconnectTestDB } = require("./setup");
+const { createVerifiedUser, setWalletPin } = require("./helpers");
 
 beforeAll(connectTestDB);
 afterAll(disconnectTestDB);
 
-async function createVerifiedUser({ name, email, password, role }) {
-  await request(app).post("/api/auth/send-otp").send({ name, email, password, role });
-  const stored = await User.findOne({ email }).select("+otpCode");
-  const verify = await request(app).post("/api/auth/verify-otp").send({ email, otp: stored.otpCode });
-  return verify.body.data.token;
-}
 
 describe("Reader purchase flow", () => {
   let authorToken;
@@ -32,6 +27,8 @@ describe("Reader purchase flow", () => {
       password: "password123",
       role: "reader",
     });
+
+    await setWalletPin(readerToken, "1234");
 
     // Directly create + publish two books via the model, to test the
     // purchase route in isolation from the full submission workflow
@@ -75,7 +72,7 @@ describe("Reader purchase flow", () => {
     const res = await request(app)
       .post(`/api/reader/${paidBookId}/purchase`)
       .set("Authorization", `Bearer ${readerToken}`)
-      .send({});
+      .send({ pin: "1234" });
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
@@ -96,7 +93,7 @@ describe("Reader purchase flow", () => {
     const res = await request(app)
       .post(`/api/reader/${paidBookId}/purchase`)
       .set("Authorization", `Bearer ${readerToken}`)
-      .send({});
+      .send({ pin: "1234" });
 
     expect(res.status).toBe(400);
     expect(res.body.message).toMatch(/already purchased/i);
@@ -143,7 +140,7 @@ describe("Reader purchase flow", () => {
     const res = await request(app)
       .post(`/api/reader/${expensiveBook._id}/purchase`)
       .set("Authorization", `Bearer ${readerToken}`)
-      .send({});
+      .send({ pin: "1234" });
 
     expect(res.status).toBe(400);
     expect(res.body.message).toMatch(/insufficient/i);

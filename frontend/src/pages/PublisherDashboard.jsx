@@ -2,11 +2,15 @@ import React, { useState, useEffect } from "react";
 import axios from "axios";
 import {
   BookOpen, Eye, EyeOff, Star, Clock, CheckCircle, AlertCircle, Shield,
-  Users, DollarSign, MessageCircle, Settings, FileText, Send, RefreshCw, BarChart2, Award, LogOut
+  Users, DollarSign, MessageCircle, Settings, FileText, Send, RefreshCw, BarChart2, Award, LogOut, HelpCircle
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import ChatInterface from "../components/ChatInterface";
 import WalletPinModal from "../components/WalletPinModal";
 import ThemeToggle from "../components/ThemeToggle";
+import FeatureGuide from "../components/FeatureGuide";
+import WelcomeBanner from "../components/WelcomeBanner";
+import HelpTip from "../components/HelpTip";
 import { useAuth } from "../context/AuthContext";
 import { Sparkles } from "lucide-react";
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
@@ -28,10 +32,13 @@ const StatCard = ({ icon, label, value, color }) => (
 // ─── PUBLISHER DASHBOARD ─────────────────────────────────────────────────────
 const PublisherDashboard = ({ user, token, onLogout }) => {
   const { updateProfile } = useAuth();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("overview");
   const [submissions, setSubmissions] = useState([]);
   const [loadingSubmissions, setLoadingSubmissions] = useState(false);
   const [selectedSub, setSelectedSub] = useState(null);
+  const [draftLoading, setDraftLoading] = useState(false);
+  const [draftError, setDraftError] = useState("");
   
   // Verification Proof
   const [verifying, setVerifying] = useState(false);
@@ -68,32 +75,15 @@ const PublisherDashboard = ({ user, token, onLogout }) => {
     fetchAuthors();
   }, []);
 
+  // The publisher's inbox: manuscripts authors have sent to THIS publisher
+  // (summaries only — the draft text is loaded when one is opened).
   const fetchSubmissions = async () => {
     setLoadingSubmissions(true);
     try {
-      // Find all manuscripts submitted to this publisher
-      const { data } = await axios.get(`${BASE_URL}/api/books?limit=100&status=under_review`, {
+      const { data } = await axios.get(`${BASE_URL}/api/manuscripts/submissions`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      // Get also other states: seen, cost_proposed, published under this publisher
-      const res = await axios.get(`${BASE_URL}/api/books?limit=100&status=seen`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const resProp = await axios.get(`${BASE_URL}/api/books?limit=100&status=cost_proposed`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const resPub = await axios.get(`${BASE_URL}/api/books?limit=100&status=published`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-
-      const allSubs = [
-        ...(data.data || []),
-        ...(res.data?.data || []),
-        ...(resProp.data?.data || []),
-        ...(resPub.data?.data || [])
-      ].filter(b => b.publisher?._id === user?._id || b.publisher === user?._id);
-
-      setSubmissions(allSubs);
+      if (data.success) setSubmissions(data.data || []);
     } catch (err) {
       console.error(err);
     } finally {
@@ -150,19 +140,29 @@ const PublisherDashboard = ({ user, token, onLogout }) => {
     }
   };
 
-  // Publisher opens submission (transitions under_review to seen)
+  // Publisher opens a submission: it is marked "seen" (the author is told
+  // it was read), then the full draft — text and chapters — is loaded.
   const handleOpenSubmission = async (sub) => {
     setSelectedSub(sub);
     setAiReport(null);
-    if (sub.status === "under_review") {
-      try {
+    setDraftError("");
+    setDraftLoading(true);
+    try {
+      if (sub.status === "under_review") {
         await axios.post(`${BASE_URL}/api/manuscripts/${sub._id}/mark-seen`, {}, {
           headers: { Authorization: `Bearer ${token}` }
         });
         fetchSubmissions();
-      } catch (err) {
-        console.error(err);
       }
+      const { data } = await axios.get(`${BASE_URL}/api/manuscripts/${sub._id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (data.success) setSelectedSub(data.data);
+    } catch (err) {
+      console.error(err);
+      setDraftError(err.response?.data?.message || "Could not load this manuscript. Please try again.");
+    } finally {
+      setDraftLoading(false);
     }
   };
 
@@ -196,7 +196,7 @@ const PublisherDashboard = ({ user, token, onLogout }) => {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (data.success) {
-        alert(`Proposed cost of $${pricingCost} sent to author successfully!`);
+        alert(`Your offer to publish for a $${pricingCost} fee was sent to the author.`);
         setPricingCost("");
         setSelectedSub(null);
         fetchSubmissions();
@@ -253,6 +253,9 @@ const PublisherDashboard = ({ user, token, onLogout }) => {
           <button className={`sidebar-link ${activeTab === "settings" ? "active" : ""}`} onClick={() => setActiveTab("settings")}>
             <Settings size={18} /><span>Settings</span>
           </button>
+          <button className={`sidebar-link ${activeTab === "help" ? "active" : ""}`} onClick={() => setActiveTab("help")}>
+            <HelpCircle size={18} /><span>Help & Guide</span>
+          </button>
         </nav>
 
         {/* Wallet Balance widget — masked by default (GPay style) */}
@@ -268,6 +271,10 @@ const PublisherDashboard = ({ user, token, onLogout }) => {
         }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ fontSize: 10, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: "bold" }}>Wallet Balance</span>
+            <HelpTip
+              title="Wallet balance"
+              text="Your in-app money, used to buy books and pay publishing fees. It is hidden by default — click the eye and enter your PIN to see it."
+            />
             <button
               onClick={() => showBalance ? setShowBalance(false) : setBalancePinOpen(true)}
               style={{ background: "none", border: "none", color: "var(--info)", cursor: "pointer", padding: 0 }}
@@ -315,6 +322,8 @@ const PublisherDashboard = ({ user, token, onLogout }) => {
                   <p>Securely negotiate royalties, verify identities on the ledger, and publish manuscripts.</p>
                 </div>
               </div>
+
+              <WelcomeBanner role="publisher" userId={user?._id} onOpenGuide={() => setActiveTab("help")} />
 
               <div className="stats-row">
                 <StatCard icon={<BookOpen size={20} />} label="Published Books" value={publishedBooks.length} color="var(--info)" />
@@ -486,11 +495,15 @@ const PublisherDashboard = ({ user, token, onLogout }) => {
                         <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>Status: <strong style={{ color: "var(--info)" }}>{selectedSub.status}</strong></span>
                       </div>
 
-                      {/* AI scan box */}
+                      {/* Automatic scan box (readability formula + similarity check) */}
                       <div style={{ background: "rgba(8,145,178,0.03)", padding: 16, border: "1px solid rgba(8,145,178,0.1)", borderRadius: 10, marginBottom: 16 }}>
                         <div style={{ display: "flex", justify: "space-between", alignItems: "center" }}>
                           <h4 style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--info)" }}>
-                            <Sparkles size={14} /> AI Quality & Plagiarism Assessment
+                            <Sparkles size={14} /> Readability & Plagiarism Check
+                            <HelpTip
+                              title="How to read these scores"
+                              text="Quality is an estimate of how easy the text is to read — not a verdict on the story. Plagiarism shows how similar it is to books already on BookConnect (0% = nothing similar); it does not search the wider internet."
+                            />
                           </h4>
 
                           <button
@@ -531,16 +544,51 @@ const PublisherDashboard = ({ user, token, onLogout }) => {
                         )}
                       </div>
 
-                      {/* Content block */}
-                      <div style={{ maxHeight: 250, overflowY: "auto", padding: 12, background: "color-mix(in srgb, var(--text-primary) 2%, transparent)", borderRadius: 8, fontSize: 13, lineHeight: 1.6, marginBottom: 20 }}>
-                        {selectedSub.content}
+                      {/* The draft the author sent — read it before making an offer */}
+                      <div style={{ marginBottom: 20 }}>
+                        <div style={{ fontSize: 12, fontWeight: "bold", marginBottom: 8, color: "var(--text-secondary)" }}>
+                          Manuscript draft
+                          {!draftLoading && selectedSub.content !== undefined && (
+                            <span style={{ fontWeight: 400 }}>
+                              {" "}· {(selectedSub.content || "").split(/\s+/).filter(Boolean).length +
+                                (selectedSub.chapters || []).reduce((n, c) => n + (c.content || "").split(/\s+/).filter(Boolean).length, 0)} words
+                              {(selectedSub.chapters || []).length > 0 && ` · ${selectedSub.chapters.length} chapter${selectedSub.chapters.length === 1 ? "" : "s"}`}
+                            </span>
+                          )}
+                        </div>
+                        {draftLoading ? (
+                          <div style={{ padding: 16, fontSize: 13, color: "var(--text-muted)" }}>Opening the manuscript...</div>
+                        ) : draftError ? (
+                          <div style={{ padding: 16, fontSize: 13, color: "var(--danger)" }}>{draftError}</div>
+                        ) : (
+                          <div style={{ maxHeight: 420, overflowY: "auto", padding: 12, background: "color-mix(in srgb, var(--text-primary) 2%, transparent)", borderRadius: 8, fontSize: 13, lineHeight: 1.7 }}>
+                            {(selectedSub.content || "").trim() && (
+                              <div style={{ whiteSpace: "pre-wrap", marginBottom: (selectedSub.chapters || []).length ? 16 : 0 }}>{selectedSub.content}</div>
+                            )}
+                            {(selectedSub.chapters || []).map((ch, i) => (
+                              <details key={ch._id || i} style={{ marginBottom: 8 }}>
+                                <summary style={{ cursor: "pointer", fontWeight: 600 }}>{ch.title || `Chapter ${i + 1}`}</summary>
+                                <div style={{ whiteSpace: "pre-wrap", padding: "8px 0 4px" }}>{ch.content}</div>
+                              </details>
+                            ))}
+                            {!(selectedSub.content || "").trim() && !(selectedSub.chapters || []).length && (
+                              <span style={{ color: "var(--text-muted)" }}>The author has not written any text yet.</span>
+                            )}
+                          </div>
+                        )}
                       </div>
 
                       {/* Pricing proposal cost action */}
                       {selectedSub.status !== "published" ? (
                         <div style={{ borderTop: "1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)", paddingTop: 16 }}>
                           <form onSubmit={handleProposeCost} style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                            <span style={{ fontSize: 12, fontWeight: "bold" }}>Set Publishing Cost Fee ($):</span>
+                            <span style={{ fontSize: 12, fontWeight: "bold" }}>
+                              Your offer — publishing fee ($):
+                              <HelpTip
+                                title="What is this offer?"
+                                text="After reading the draft, you offer to publish it for this fee. The author sees your offer and can accept it by paying from their wallet balance — then the book goes live and the fee is added to your balance."
+                              />
+                            </span>
                             <input
                               type="number"
                               required
@@ -555,7 +603,7 @@ const PublisherDashboard = ({ user, token, onLogout }) => {
                               }}
                             />
                             <button type="submit" disabled={submittingCost} className="btn-primary" style={{ background: "var(--info)" }}>
-                              {submittingCost ? "Sending..." : "Submit Cost Proposal"}
+                              {submittingCost ? "Sending..." : "Send offer to author"}
                             </button>
                           </form>
                         </div>
@@ -677,6 +725,14 @@ const PublisherDashboard = ({ user, token, onLogout }) => {
             <div style={{ height: "calc(100vh - 120px)" }}>
               <ChatInterface user={user} currentRole="publisher" token={token} />
             </div>
+          )}
+
+          {/* HELP & GUIDE TAB */}
+          {activeTab === "help" && (
+            <FeatureGuide
+              role="publisher"
+              onGo={(target) => (target.tab ? setActiveTab(target.tab) : navigate(target.path))}
+            />
           )}
 
           {/* SETTINGS TAB */}

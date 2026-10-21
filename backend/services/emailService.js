@@ -12,14 +12,16 @@ const transporter = nodemailer.createTransport({
   socketTimeout: 10000,
 });
 
-// Verify connection configuration
-transporter.verify(function (error, success) {
-  if (error) {
-    console.log("Email server connection error:", error);
-  } else {
-    console.log("Email server is ready to send messages");
-  }
-});
+// Verify connection configuration (skipped in tests, which never send real mail)
+if (process.env.NODE_ENV !== "test") {
+  transporter.verify(function (error, success) {
+    if (error) {
+      console.log("Email server connection error:", error.message);
+    } else {
+      console.log("Email server is ready to send messages");
+    }
+  });
+}
 
 const sendOTPEmail = async (email, name, otp) => {
   try {
