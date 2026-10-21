@@ -11,6 +11,7 @@ import {
   Hash, Lock, Sparkles, ArrowUpRight, Menu, X, HelpCircle
 } from "lucide-react";
 import SearchBar from "../components/SearchBar";
+import AdminDashboard from "./AdminDashboard";
 import FeatureGuide from "../components/FeatureGuide";
 import HelpTip from "../components/HelpTip";
 import WalletPinModal from "../components/WalletPinModal";
@@ -163,7 +164,7 @@ const Skel = () => (
 import ChatInterface from "../components/ChatInterface";
 
 const Dashboard = () => {
-  const { user, logout, isAuthor, isPublisher, updateUserFields } = useAuth();
+  const { user, logout, isAuthor, isPublisher, isAdmin, updateUserFields } = useAuth();
   const navigate = useNavigate();
   const [active, setActive] = useState("overview");
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -247,7 +248,11 @@ const Dashboard = () => {
 
   const handleLogout = () => { logout(); navigate("/login"); };
 
-  // Direct delegation to specialized Publisher & Reader dashboards
+  // Direct delegation to specialized Admin, Publisher & Reader dashboards
+  if (isAdmin) {
+    return <AdminDashboard user={user} onLogout={handleLogout} />;
+  }
+
   if (role === "publisher") {
     return <PublisherDashboard user={user} token={token} onLogout={handleLogout} />;
   }

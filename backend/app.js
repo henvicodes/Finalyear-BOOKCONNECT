@@ -20,6 +20,8 @@ const chatRoutes = require("./routes/chatRoutes");
 const readerRoutes = require("./routes/readerRoutes");
 const recommendationRoutes = require("./routes/recommendationRoutes");
 const matchingRoutes = require("./routes/matchingRoutes");
+const adminRoutes = require("./routes/adminRoutes");
+const publisherVerificationRoutes = require("./routes/publisherVerificationRoutes");
 
 const app = express();
 
@@ -53,6 +55,8 @@ app.use("/api/messages", chatRoutes);
 app.use("/api/reader", readerRoutes);
 app.use("/api/recommendations", recommendationRoutes);
 app.use("/api/matching", matchingRoutes);
+app.use("/api/admin", adminRoutes);
+app.use("/api/publisher-verification", publisherVerificationRoutes);
 
 app.get("/api/health", (_, res) => res.json({ status: "ok" }));
 

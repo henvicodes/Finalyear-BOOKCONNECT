@@ -40,9 +40,12 @@ const PublisherDashboard = ({ user, token, onLogout }) => {
   
   // Verification Proof
   const [verifying, setVerifying] = useState(false);
-  const [proofDoc, setProofDoc] = useState(user?.publisherVerification?.documentLink || "");
-  const [isVerified, setIsVerified] = useState(user?.publisherVerification?.isVerified || false);
-  const [verifyHash, setVerifyHash] = useState(user?.publisherVerification?.blockchainHash || "");
+  // Real verification: the publisher sends evidence and an admin approves it.
+  const [verification, setVerification] = useState(null);
+  const [regTypes, setRegTypes] = useState([]);
+  const [form, setForm] = useState({ companyName: "", registrationType: "GSTIN", registrationNumber: "", documentLink: "", websiteUrl: "", notes: "" });
+  const isVerified = !!verification?.isVerified;
+  const verifyHash = verification?.blockchainHash || "";
   const [showBalance, setShowBalance] = useState(false);
   const [balancePinOpen, setBalancePinOpen] = useState(false);
 
@@ -102,34 +105,35 @@ const PublisherDashboard = ({ user, token, onLogout }) => {
     }
   };
 
+  useEffect(() => {
+    loadVerification();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleSearchAuthors = (e) => {
     e.preventDefault();
     fetchAuthors(searchQuery);
   };
 
-  // Submit Publisher Web3 Verification Proof
+  const loadVerification = async () => {
+    try {
+      const { data } = await axios.get(`${BASE_URL}/api/publisher-verification/mine`);
+      setVerification(data.data);
+      setRegTypes(data.registrationTypes || []);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Send details for an admin to check
   const handleVerifyPublisher = async (e) => {
     e.preventDefault();
-    if (!proofDoc.trim()) return alert("Please specify a document URL (e.g. Google Doc link)");
     setVerifying(true);
     try {
-      const mockHash = "0x" + Array.from({ length: 40 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
-      const { data } = await axios.put(`${BASE_URL}/api/auth/profile`, {
-        publisherVerification: {
-          isVerified: true,
-          documentLink: proofDoc,
-          blockchainHash: mockHash
-        }
-      }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (data.success) {
-        setIsVerified(true);
-        setVerifyHash(mockHash);
-        alert("Publisher credibility successfully locked on Blockchain Ledger!");
-      }
-    } catch {
-      alert("Error uploading verification proof.");
+      await axios.post(`${BASE_URL}/api/publisher-verification`, form);
+      await loadVerification();
+    } catch (err) {
+      alert(err.response?.data?.message || "Could not send your details.");
     } finally {
       setVerifying(false);
     }
@@ -410,45 +414,82 @@ const PublisherDashboard = ({ user, token, onLogout }) => {
             </div>
           )}
 
-          {/* BLOCKCHAIN TRUST VERIFICATION TAB */}
+          {/* PUBLISHER VERIFICATION TAB */}
           {activeTab === "verification" && (
             <div className="dash-content animate-fade-in" style={{ maxWidth: 680 }}>
               <div className="dash-welcome">
                 <div>
-                  <h1>Publisher Trust Verification</h1>
-                  <p>Verify your identity by locking accreditation credentials (e.g. Google Doc link) on the blockchain. This prevents publisher fraud and reassures authors.</p>
+                  <h1>Publisher Verification</h1>
+                  <p>Show authors you are a real, registered publisher. An admin checks your details and, if they match, adds a Verified badge to your name.</p>
                 </div>
               </div>
 
               <div className="glass-panel" style={{ padding: 30 }}>
-                {isVerified ? (
+                {!verification ? (
+                  <p style={{ color: "var(--text-muted)" }}>Loading…</p>
+                ) : verification.status === "approved" ? (
                   <div style={{ textAlign: "center", padding: "20px 0" }}>
                     <Award size={48} color="var(--success)" style={{ marginBottom: 12 }} />
-                    <h3 style={{ color: "var(--success)" }}>Web3 Credibility Ledger Verified</h3>
+                    <h3 style={{ color: "var(--success)" }}>Verified publisher</h3>
                     <p style={{ fontSize: 13, color: "var(--text-secondary)", marginTop: 8 }}>
-                      Your proof doc has been hashed and immutable locked on the blockchain.
+                      An admin checked your details on {verification.reviewedAt ? new Date(verification.reviewedAt).toLocaleDateString() : "—"}. Authors now see a Verified badge next to your name.
                     </p>
-                    <div style={{ marginTop: 16, padding: 12, background: "color-mix(in srgb, var(--text-primary) 2%, transparent)", borderRadius: 8, fontFamily: "monospace", fontSize: 11 }}>
-                      <strong>Accreditation Doc:</strong> {proofDoc}
+                    <div style={{ marginTop: 16, padding: 12, background: "color-mix(in srgb, var(--text-primary) 2%, transparent)", borderRadius: 8, fontFamily: "monospace", fontSize: 11, textAlign: "left", wordBreak: "break-all" }}>
+                      <strong>Company:</strong> {verification.companyName}
                       <br />
-                      <strong>Ledger Hash:</strong> {verifyHash}
+                      <strong>{(verification.registrationType || "").replace("_", " ")}:</strong> {verification.registrationNumber}
+                      <br />
+                      <strong>Fingerprint:</strong> {verifyHash}
                     </div>
                   </div>
+                ) : verification.status === "pending" ? (
+                  <div style={{ textAlign: "center", padding: "20px 0" }}>
+                    <Clock size={44} color="var(--warning)" style={{ marginBottom: 12 }} />
+                    <h3>Waiting for an admin to review</h3>
+                    <p style={{ fontSize: 13, color: "var(--text-secondary)", marginTop: 8 }}>
+                      You sent <strong>{verification.companyName}</strong> ({(verification.registrationType || "").replace("_", " ")} {verification.registrationNumber}) on {new Date(verification.submittedAt).toLocaleDateString()}. You'll get a message when it is decided.
+                    </p>
+                  </div>
                 ) : (
-                  <form onSubmit={handleVerifyPublisher} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                  <form onSubmit={handleVerifyPublisher} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                    {verification.status === "rejected" && (
+                      <div style={{ background: "var(--danger-bg)", border: "1px solid var(--danger-border)", color: "var(--danger)", padding: 12, borderRadius: 8, fontSize: 13 }}>
+                        <strong>Not verified:</strong> {verification.rejectionReason} You can correct your details and send them again.
+                      </div>
+                    )}
                     <div>
-                      <label className="form-label">Google Doc / Verification Document URL</label>
-                      <input
-                        type="url"
-                        className="input-field"
-                        required
-                        placeholder="https://docs.google.com/document/d/..."
-                        value={proofDoc}
-                        onChange={e => setProofDoc(e.target.value)}
-                      />
+                      <label className="form-label">Company / imprint name</label>
+                      <input className="input-field" required value={form.companyName} onChange={e => setForm({ ...form, companyName: e.target.value })} />
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 12 }}>
+                      <div>
+                        <label className="form-label">Registration type</label>
+                        <select className="input-field" value={form.registrationType} onChange={e => setForm({ ...form, registrationType: e.target.value })}>
+                          {(regTypes.length ? regTypes : [{ type: "GSTIN" }]).map(r => <option key={r.type} value={r.type}>{r.type.replace("_", " ")}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="form-label">
+                          Registration number
+                          <HelpTip title="Which number?" text="Your company (CIN), LLP (LLPIN), tax (GSTIN) or MSME (Udyam) registration number — or the full ISBN of one of your published books. The admin looks it up on the official register." />
+                        </label>
+                        <input className="input-field" required value={form.registrationNumber} onChange={e => setForm({ ...form, registrationNumber: e.target.value })} placeholder={regTypes.find(r => r.type === form.registrationType)?.hint || ""} />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="form-label">Link to your registration document</label>
+                      <input type="url" className="input-field" required placeholder="https://drive.google.com/…  (anyone-with-link can view)" value={form.documentLink} onChange={e => setForm({ ...form, documentLink: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className="form-label">Website (optional)</label>
+                      <input type="url" className="input-field" placeholder="https://" value={form.websiteUrl} onChange={e => setForm({ ...form, websiteUrl: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className="form-label">Anything else the admin should know (optional)</label>
+                      <textarea className="input-field" rows={3} maxLength={1000} value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
                     </div>
                     <button type="submit" disabled={verifying} className="btn-primary" style={{ justifyContent: "center" }}>
-                      {verifying ? "Signing Ledger..." : "Register Verification Proof on Blockchain"}
+                      {verifying ? "Sending…" : "Send for verification"}
                     </button>
                   </form>
                 )}

@@ -289,6 +289,14 @@ const loginUser = async (req, res) => {
       });
     }
 
+    if (user.isSuspended) {
+      return res.status(403).json({
+        success: false,
+        suspended: true,
+        message: "This account has been suspended. Contact support.",
+      });
+    }
+
     if (!user.isEmailVerified) {
       return res.status(403).json({
         success: false,
@@ -335,7 +343,8 @@ const getUserProfile = async (req, res) => {
         profilePicture: user.profilePicture,
         bio: user.bio,
         interests: user.interests,
-        isVerified: user.isVerified,
+        isVerified: user.isVerified || !!user.publisherVerification?.isVerified,
+        publisherVerificationStatus: user.role === "publisher" ? (user.publisherVerification?.status || "none") : undefined,
         blockchainWallet: user.blockchainWallet,
         walletBalance: user.walletBalance,
         earnings: user.earnings,
@@ -438,14 +447,17 @@ const linkWallet = async (req, res) => {
 const searchUsers = async (req, res) => {
   try {
     const { q } = req.query;
-    if (!q) return res.json({ success: true, data: [] });
+    if (typeof q !== "string" || !q) return res.json({ success: true, data: [] });
+    // escape so user input is matched literally (no regex injection / ReDoS)
+    const safe = q.slice(0, 80).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const users = await User.find({
       $or: [
-        { name: { $regex: q, $options: "i" } },
-        { email: { $regex: q, $options: "i" } }
+        { name: { $regex: safe, $options: "i" } },
+        { email: { $regex: safe, $options: "i" } }
       ],
-      role: { $in: ["author", "publisher", "reader"] }
-    }).select("name email role profilePicture").limit(100);
+      role: { $in: ["author", "publisher", "reader"] },
+      isSuspended: { $ne: true },
+    }).select("name email role profilePicture publisherVerification.isVerified").limit(100);
     res.json({ success: true, data: users });
   } catch (error) {
     res.status(500).json({ success: false, message: "Server error" });

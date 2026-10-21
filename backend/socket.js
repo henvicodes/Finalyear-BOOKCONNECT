@@ -39,8 +39,8 @@ function attachSocket(server) {
         (socket.handshake.auth && socket.handshake.auth.token);
       if (!token) return next(new Error("Not authorized"));
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      const user = await User.findById(decoded.id).select("_id");
-      if (!user) return next(new Error("Not authorized"));
+      const user = await User.findById(decoded.id).select("_id isSuspended");
+      if (!user || user.isSuspended) return next(new Error("Not authorized"));
       socket.userId = user._id.toString();
       next();
     } catch {

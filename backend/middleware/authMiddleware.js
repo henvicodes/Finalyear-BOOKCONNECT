@@ -49,6 +49,14 @@ const protect = async (req, res, next) => {
       });
     }
 
+    if (req.user.isSuspended) {
+      return res.status(403).json({
+        success: false,
+        suspended: true,
+        message: "This account has been suspended. Contact support.",
+      });
+    }
+
     next();
   } catch (error) {
     return res.status(401).json({
@@ -67,7 +75,9 @@ const optionalAuth = async (req, res, next) => {
   if (found) {
     try {
       const decoded = jwt.verify(found.token, process.env.JWT_SECRET);
-      req.user = await User.findById(decoded.id).select("-password");
+      const account = await User.findById(decoded.id).select("-password");
+      // a suspended user is treated as anonymous (no purchased-content access)
+      if (account && !account.isSuspended) req.user = account;
     } catch {
       // Invalid/expired token — proceed as anonymous instead of failing.
     }

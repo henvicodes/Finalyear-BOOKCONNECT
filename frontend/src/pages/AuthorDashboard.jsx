@@ -771,7 +771,7 @@ export const AuthorUploadBook = ({ token, setActive, fetchBooks }) => {
                 <select className="input-field" value={selectedPublisher} onChange={e => setSelectedPublisher(e.target.value)}>
                   <option value="">-- Choose Publisher --</option>
                   {publishers.map(p => (
-                    <option key={p._id} value={p._id}>{p.name}</option>
+                    <option key={p._id} value={p._id}>{p.name}{p.publisherVerification?.isVerified ? " ✓ Verified" : " (not verified)"}</option>
                   ))}
                 </select>
               </div>
@@ -1045,7 +1045,7 @@ export const AuthorEditBook = ({ token, bookId, setActive, fetchBooks }) => {
                 <select className="input-field" value={selectedPublisher} onChange={e => setSelectedPublisher(e.target.value)}>
                   <option value="">-- Choose Publisher --</option>
                   {publishers.map(p => (
-                    <option key={p._id} value={p._id}>{p.name}</option>
+                    <option key={p._id} value={p._id}>{p.name}{p.publisherVerification?.isVerified ? " ✓ Verified" : " (not verified)"}</option>
                   ))}
                 </select>
               </div>
