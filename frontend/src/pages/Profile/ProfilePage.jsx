@@ -27,7 +27,8 @@ const ProfilePage = () => {
             interests: data.data.interests,
           });
         }
-      } catch (_) {
+      } catch {
+        // The cached profile is shown if the refresh fails.
       } finally {
         setProfileLoading(false);
       }

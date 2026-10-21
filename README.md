@@ -19,6 +19,8 @@ MERN stack (MongoDB, Express, React, Node) + Socket.io for real-time chat + Web3
 - **Multilingual translation** — Claude if configured, else Gemini, else the free MyMemory API — translate any chapter into Hindi, Marathi, Bengali, Tamil, Telugu, Gujarati, Kannada, Malayalam, Punjabi, Spanish, French, German, Chinese, Japanese, or Arabic
 - **Real blockchain anchoring** — two Solidity smart contracts deployed to the public Ethereum Sepolia testnet (see [`blockchain/`](blockchain)): `ManuscriptRegistry` for content-hash proof-of-authorship, and `PaymentLedger` for P2P wallet transfers. Both are called directly from the user's own connected MetaMask wallet — the app never holds or signs with a private key
 - **Wallet & payments** — an in-app USD-style wallet balance; P2P transfers between users with a linked MetaMask wallet move real Sepolia ETH and record the payment on-chain in one atomic transaction via `PaymentLedger.makePayment` (see note below)
+- **Recommendations** — a hybrid of content-based TF-IDF similarity and item-based collaborative filtering ("readers who liked X also liked this") computed live from BookConnect's own ratings and purchases (`backend/utils/itemCF.js`; the same method that won the offline Goodbooks-10k comparison in `ml/`). With too little rating data it quietly falls back to content-only, then to trending
+- **Publisher decisions** — a publisher can read the draft, make an offer, or decline with a reason; the author is told and can send the manuscript to someone else
 - **Real-time chat** — Socket.io messaging between authors/readers/publishers, plus a built-in AI assistant contact
 - **Light/dark theme** — a full design-system token system with a persisted toggle
 
@@ -38,9 +40,10 @@ Both contracts' source is in [`blockchain/contracts/`](blockchain/contracts), wi
 - **Passwords** bcrypt-hashed; **wallet PIN** bcrypt-hashed, 5 wrong tries lock it for 15 minutes, and changing/resetting it needs the current PIN or the account password (`backend/scripts/hashExistingPins.js` upgrades any old plain-text PINs)
 - **Sign-up codes (OTP)** stored only as a SHA-256 hash, compared in constant time, burned after 5 wrong guesses; login requires a verified e-mail; codes are only printed to the console outside production
 - **Money moves are atomic**: balances change with guarded single-document updates (`backend/utils/wallet.js`), so parallel requests can't double-spend, and a failed step is rolled back. Paying (book purchase, publishing fee, transfer) requires the wallet PIN
-- **Chat sockets** need the login JWT in the handshake; the user id comes from the verified token
+- **Browser sessions** use an httpOnly, SameSite cookie, so page scripts (and any injected script) can never read the login token; state-changing requests must also carry an `X-Requested-With` header (CSRF guard). Logging out clears the cookie. API clients may still send `Authorization: Bearer <jwt>`
+- **Chat sockets** are authenticated with that same cookie (or a JWT in the handshake); the user id comes from the verified token
 - Rate limiting on login / OTP / wallet routes, `helmet` headers, a sanitizer that strips MongoDB operators from input, 7-day JWTs, and no internal error text sent to the browser
-- Known limits: the JWT is kept in `localStorage` (no refresh-token / httpOnly cookie yet); the "quality score" is a readability formula, not AI; standalone MongoDB has no multi-document transactions, so atomicity relies on guarded updates and compensation
+- Known limits: the "quality score" is a readability formula, not AI; sessions last 7 days with no refresh-token rotation; standalone MongoDB has no multi-document transactions, so atomicity relies on guarded updates and compensation
 
 ## Project structure
 

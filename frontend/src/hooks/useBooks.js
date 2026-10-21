@@ -77,23 +77,24 @@ export const useBook = (id) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
+  const fetchBook = useCallback(async () => {
     if (!id) return;
-    const fetchBook = async () => {
-      setLoading(true);
-      try {
-        const { data } = await api.get(`/api/books/${id}`);
-        if (data.success) setBook(data.data);
-      } catch (err) {
-        setError(err.response?.data?.message || "Failed to load book");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchBook();
+    setLoading(true);
+    try {
+      const { data } = await api.get(`/api/books/${id}`);
+      if (data.success) setBook(data.data);
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to load book");
+    } finally {
+      setLoading(false);
+    }
   }, [id]);
 
-  return { book, loading, error, refetch: () => fetchBook() };
+  useEffect(() => {
+    fetchBook();
+  }, [fetchBook]);
+
+  return { book, loading, error, refetch: fetchBook };
 };
 
 export const useChapters = (bookId) => {

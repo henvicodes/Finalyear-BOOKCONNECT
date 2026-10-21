@@ -16,7 +16,6 @@ import { Sparkles } from "lucide-react";
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 // Format helper
-const fmt = (n) => n >= 1000 ? (n / 1000).toFixed(1) + "K" : String(n || 0);
 
 // Stat Card
 const StatCard = ({ icon, label, value, color }) => (
@@ -35,7 +34,6 @@ const PublisherDashboard = ({ user, token, onLogout }) => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("overview");
   const [submissions, setSubmissions] = useState([]);
-  const [loadingSubmissions, setLoadingSubmissions] = useState(false);
   const [selectedSub, setSelectedSub] = useState(null);
   const [draftLoading, setDraftLoading] = useState(false);
   const [draftError, setDraftError] = useState("");
@@ -78,7 +76,6 @@ const PublisherDashboard = ({ user, token, onLogout }) => {
   // The publisher's inbox: manuscripts authors have sent to THIS publisher
   // (summaries only — the draft text is loaded when one is opened).
   const fetchSubmissions = async () => {
-    setLoadingSubmissions(true);
     try {
       const { data } = await axios.get(`${BASE_URL}/api/manuscripts/submissions`, {
         headers: { Authorization: `Bearer ${token}` }
@@ -86,8 +83,6 @@ const PublisherDashboard = ({ user, token, onLogout }) => {
       if (data.success) setSubmissions(data.data || []);
     } catch (err) {
       console.error(err);
-    } finally {
-      setLoadingSubmissions(false);
     }
   };
 
@@ -133,7 +128,7 @@ const PublisherDashboard = ({ user, token, onLogout }) => {
         setVerifyHash(mockHash);
         alert("Publisher credibility successfully locked on Blockchain Ledger!");
       }
-    } catch (err) {
+    } catch {
       alert("Error uploading verification proof.");
     } finally {
       setVerifying(false);
@@ -177,7 +172,7 @@ const PublisherDashboard = ({ user, token, onLogout }) => {
         setAiReport(data);
         fetchSubmissions();
       }
-    } catch (err) {
+    } catch {
       alert("Error evaluating manuscript.");
     } finally {
       setEvaluatingSub(false);
@@ -201,10 +196,32 @@ const PublisherDashboard = ({ user, token, onLogout }) => {
         setSelectedSub(null);
         fetchSubmissions();
       }
-    } catch (err) {
+    } catch {
       alert("Error submitting proposal cost.");
     } finally {
       setSubmittingCost(false);
+    }
+  };
+
+  // Publisher turns the submission down (optionally with a short reason)
+  const handleDecline = async () => {
+    if (!selectedSub) return;
+    const reason = window.prompt(
+      `Decline "${selectedSub.title}"? The author will be told and can send it to someone else.\n\nOptional reason (shown to the author):`,
+      ""
+    );
+    if (reason === null) return; // cancelled
+    try {
+      const { data } = await axios.post(`${BASE_URL}/api/manuscripts/${selectedSub._id}/decline`, { reason }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (data.success) {
+        setSelectedSub(null);
+        setPricingCost("");
+        fetchSubmissions();
+      }
+    } catch (err) {
+      alert(err.response?.data?.message || "Could not decline this manuscript.");
     }
   };
 
@@ -604,6 +621,9 @@ const PublisherDashboard = ({ user, token, onLogout }) => {
                             />
                             <button type="submit" disabled={submittingCost} className="btn-primary" style={{ background: "var(--info)" }}>
                               {submittingCost ? "Sending..." : "Send offer to author"}
+                            </button>
+                            <button type="button" onClick={handleDecline} className="btn-secondary" style={{ color: "var(--danger)" }}>
+                              Decline
                             </button>
                           </form>
                         </div>

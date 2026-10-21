@@ -106,7 +106,7 @@ const BookSkeleton = () => (
 
 //  Component
 const AuthorProfileContent = ({ user }) => {
-  const { books, loading, error, refetch } = useMyBooks();
+  const { books, loading, error } = useMyBooks();
 
   // Compute real stats from actual books
   const published = books.filter((b) => b.status === "published");

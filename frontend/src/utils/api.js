@@ -1,29 +1,16 @@
 import axios from "axios";
+import { configureAxios } from "./session";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
-const api = axios.create({
-  baseURL: API_URL,
-  headers: {
-    "Content-Type": "application/json",
-  },
-});
-
-// Add token to requests
-api.interceptors.request.use(
-  (config) => {
-    const user = localStorage.getItem("user");
-    if (user) {
-      const { token } = JSON.parse(user);
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
-    }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  },
+// Authentication is the httpOnly session cookie (see utils/session.js).
+const api = configureAxios(
+  axios.create({
+    baseURL: API_URL,
+    headers: {
+      "Content-Type": "application/json",
+    },
+  })
 );
 
 export default api;

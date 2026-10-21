@@ -5,6 +5,7 @@ const {
   verifyOTPAndRegister,
   resendOTP,
   loginUser,
+  logoutUser,
   getUserProfile,
   updateUserProfile,
   linkWallet,
@@ -23,6 +24,7 @@ router.post("/send-otp", validateRegister, validate, sendRegistrationOTP);
 router.post("/verify-otp", verifyOTPAndRegister);
 router.post("/resend-otp", resendOTP);
 router.post("/login", validateLogin, validate, loginUser);
+router.post("/logout", logoutUser);
 
 // Private
 router.get("/profile", protect, getUserProfile);

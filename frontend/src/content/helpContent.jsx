@@ -101,14 +101,14 @@ export const GUIDE = {
     journey: [
       "Write your manuscript in Upload Book",
       "Choose a publisher and submit it",
-      "The publisher reads your draft and sends you an offer to publish",
+      "The publisher reads your draft and either sends you an offer to publish or declines it (you can then send it to someone else)",
       "Press Pay & Publish in My Books — your book goes live",
     ],
     features: [
       { icon: Upload, title: "Write a new book", text: "Add a title, genre, price, cover and your text. Use \"Suggest genre from my text\" if you're not sure which genre fits.", where: "Sidebar → Upload Book", tab: "upload", keywords: "write create new manuscript cover genre price" },
       { icon: BookOpen, title: "Add chapters", text: "Open a book with Edit, then use the Manage Chapters panel at the bottom to add, edit or delete chapters one by one.", where: "Sidebar → My Books → Edit", tab: "mybooks", keywords: "chapter write edit order" },
       { icon: Send, title: "Submit to a publisher", text: "Pick a publisher from the list and submit. They'll review it and may propose a publishing fee.", where: "Sidebar → Upload Book (or My Books → Edit)", tab: "upload", keywords: "submit publisher send review" },
-      { icon: BookOpen, title: "See all your books", text: "Every manuscript with its status: Draft, Reviewing, Read by publisher, Offer received or Published. When a fee is proposed, a Pay & Publish button appears here.", where: "Sidebar → My Books", tab: "mybooks", keywords: "status pay publish fee list" },
+      { icon: BookOpen, title: "See all your books", text: "Every manuscript with its status: Draft, Reviewing, Read by publisher, Offer received, Declined or Published. When a fee is proposed, a Pay & Publish button appears here.", where: "Sidebar → My Books", tab: "mybooks", keywords: "status pay publish fee list" },
       { icon: Sparkles, title: "AI writing helper", text: "Paste text and have it rewritten more simply, more formally, or summarised. There are also creative presets for ideas.", where: "Sidebar → AI Assistant", tab: "aiassist", keywords: "ai rewrite simplify summarise help ideas" },
       { icon: Shield, title: "Protect your work (blockchain)", text: "Create a fingerprint of your manuscript, optionally register it on the Sepolia test blockchain with MetaMask, verify it later, and see every saved version.", where: "Sidebar → Blockchain", tab: "blockchain", keywords: "blockchain copyright register verify hash version history metamask sepolia" },
       { icon: TrendingUp, title: "Readers and earnings", text: "See how many reads each book has and what you've earned.", where: "Sidebar → Analytics", tab: "analytics", keywords: "reads earnings stats analytics" },
@@ -125,12 +125,12 @@ export const GUIDE = {
     journey: [
       "An author sends you their draft",
       "Open it in Submissions and read it",
-      "Send the author an offer to publish (the fee)",
+      "Send the author an offer to publish (the fee) — or decline the manuscript",
       "When the author pays, the book goes live and the fee reaches your wallet",
     ],
     features: [
       { icon: FileText, title: "Read submitted drafts", text: "Manuscripts authors have sent to you. Click one to read the whole draft, including its chapters — opening it tells the author you have read it. You can also run the scan to see its readability and how similar it is to books already on the platform.", where: "Sidebar → Submissions", tab: "submissions", keywords: "review manuscript scan check plagiarism quality" },
-      { icon: BarChart2, title: "Send an offer to publish", text: "After reading the draft, type the publishing fee and send your offer to the author. If they accept by paying it, the book goes live.", where: "Sidebar → Submissions → open a manuscript", tab: "submissions", keywords: "fee cost price propose" },
+      { icon: BarChart2, title: "Send an offer to publish", text: "After reading the draft, type the publishing fee and send your offer to the author. If they accept by paying it, the book goes live. Not interested? Press Decline (you can add a reason) and the author is told.", where: "Sidebar → Submissions → open a manuscript", tab: "submissions", keywords: "fee cost price propose" },
       { icon: BookOpen, title: "Your published books", text: "Books you've published through BookConnect.", where: "Sidebar → Published", tab: "published", keywords: "published books list" },
       { icon: Users, title: "Find authors", text: "Search the author directory.", where: "Sidebar → Authors Directory", tab: "authors", keywords: "author directory search find" },
       { icon: MessageCircle, title: "Negotiate by chat", text: "Talk to authors about terms, or ask the built-in AI assistant a question.", where: "Sidebar → Negotiations", tab: "messages", keywords: "chat negotiate message" },

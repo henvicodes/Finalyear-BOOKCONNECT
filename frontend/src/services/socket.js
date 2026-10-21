@@ -3,28 +3,29 @@ import { io } from "socket.io-client";
 const SOCKET_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 let socket = null;
-let socketToken = null;
+let socketUserId = null;
 
-// The server identifies the user from the login token sent in the handshake,
-// so no user id is passed (or trusted). Reconnects if the login changes.
+// The server identifies the user from the httpOnly session cookie sent with the
+// handshake (withCredentials), so no token or user id is passed or trusted.
+// A fresh connection is made whenever a different user logs in.
 export const initSocket = () => {
-  let token = null;
+  let userId = null;
   try {
-    token = JSON.parse(localStorage.getItem("user") || "{}").token || null;
+    userId = JSON.parse(localStorage.getItem("user") || "{}")._id || null;
   } catch {
-    token = null;
+    userId = null;
   }
-  if (!token) return null;
+  if (!userId) return null;
 
-  if (socket && socketToken !== token) {
+  if (socket && socketUserId !== userId) {
     socket.disconnect();
     socket = null;
   }
 
   if (!socket) {
-    socketToken = token;
+    socketUserId = userId;
     socket = io(SOCKET_URL, {
-      auth: { token },
+      withCredentials: true,
       autoConnect: true,
       reconnection: true,
       reconnectionAttempts: 10,
@@ -41,6 +42,6 @@ export const disconnectSocket = () => {
   if (socket) {
     socket.disconnect();
     socket = null;
-    socketToken = null;
+    socketUserId = null;
   }
 };

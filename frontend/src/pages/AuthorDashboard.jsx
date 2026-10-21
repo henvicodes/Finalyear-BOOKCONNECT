@@ -166,12 +166,11 @@ const GenreSuggester = ({ text, token, onPick }) => {
 };
 
 // ─── BOOK ROW COMPONENT ──────────────────────────────────────────────────────
-const BookRow = ({ book, onEdit, onPayCost, onBlockchain, setActive }) => {
+const BookRow = ({ book, onEdit, onPayCost, setActive }) => {
   const isPublished = book.status === "published";
   const isReview = book.status === "under_review";
   const isSeen = book.status === "seen";
   const isCostProposed = book.status === "cost_proposed";
-  const isDraft = book.status === "draft" || !book.status;
 
   let statusLabel = "Draft";
   let statusClass = "draft";
@@ -188,6 +187,9 @@ const BookRow = ({ book, onEdit, onPayCost, onBlockchain, setActive }) => {
   } else if (isCostProposed) {
     statusLabel = "Cost Proposed";
     statusClass = "review";
+  } else if (book.status === "declined") {
+    statusLabel = "Declined";
+    statusClass = "draft";
   }
 
   return (
@@ -454,7 +456,6 @@ export const AuthorOverview = ({ user, setActive, books, loading, setEditingBook
                 book={b}
                 onEdit={(id) => { setEditingBookId(id); setActive("editbook"); }}
                 onPayCost={onPayCost}
-                onBlockchain={() => setActive("blockchain")}
                 setActive={setActive}
               />
             ))
@@ -561,8 +562,14 @@ export const AuthorMyBooks = ({ books, loading, setActive, setEditingBookId, onP
 
                 <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
                   <span className={`book-status ${b.status === "published" ? "published" : b.status === "under_review" || b.status === "seen" || b.status === "cost_proposed" ? "review" : "draft"}`}>
-                    {b.status === "published" ? "Published" : b.status === "under_review" ? "Reviewing" : b.status === "seen" ? "Read by publisher" : b.status === "cost_proposed" ? "Offer received" : "Draft"}
+                    {b.status === "published" ? "Published" : b.status === "under_review" ? "Reviewing" : b.status === "seen" ? "Read by publisher" : b.status === "cost_proposed" ? "Offer received" : b.status === "declined" ? "Declined" : "Draft"}
                   </span>
+
+                  {b.status === "declined" && (
+                    <span style={{ fontSize: 11, color: "var(--danger)", maxWidth: 240 }} title={b.declineReason || ""}>
+                      {b.declineReason ? `Publisher said: ${b.declineReason}` : "Publisher declined — edit and send to another."}
+                    </span>
+                  )}
                   
                   {b.status === "cost_proposed" && (
                     <span style={{ fontSize: 11, fontWeight: "bold", color: "var(--warning)" }}>
@@ -1114,7 +1121,7 @@ export const AuthorEditBook = ({ token, bookId, setActive, fetchBooks }) => {
                 Save Draft
               </button>
               
-              {status !== "published" && (
+              {["draft", "declined"].includes(status) && (
                 <button
                   type="button"
                   className="btn-primary"
@@ -1859,7 +1866,7 @@ export const AuthorAIAssistant = ({ token }) => {
 };
 
 // ─── AUTHOR SETTINGS ─────────────────────────────────────────────────────────
-export const AuthorSettings = ({ user, token }) => {
+export const AuthorSettings = ({ user }) => {
   const { updateProfile } = useAuth();
   const [name, setName] = useState(user?.name || "");
   const [bio, setBio] = useState(user?.bio || "");

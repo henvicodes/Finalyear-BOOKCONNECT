@@ -220,7 +220,7 @@ router.post("/assist", protect, async (req, res) => {
     res.json({ success: true, suggestion });
   } catch (error) {
     console.error("AI Assist Route error:", error);
-    res.status(500).json({ success: false, message: "Server error", error: error.message });
+    res.status(500).json({ success: false, message: "Server error" });
   }
 });
 
@@ -309,6 +309,45 @@ router.post("/suggest-genre", protect, (req, res) => {
     .slice(0, 3)
     .map((s) => ({ genre: s.genre, probability: Math.round(s.probability * 1000) / 1000 }));
   res.json({ success: true, suggestions, model: getModelInfo() });
+});
+
+// 3b. POST /api/ai/search-assist -> Optional search suggestions (needs CLAUDE_API_KEY).
+// The key stays on the server; the browser never talks to Anthropic directly.
+// Without a key it simply reports available:false and the UI hides the box.
+router.post("/search-assist", protect, async (req, res) => {
+  const { query, filters } = req.body;
+  if (typeof query !== "string" || !query.trim() || query.length > 200) {
+    return res.status(400).json({ success: false, message: "A short search query is required" });
+  }
+  if (!process.env.CLAUDE_API_KEY) {
+    return res.json({ success: true, available: false });
+  }
+  try {
+    const anthropic = new Anthropic({ apiKey: process.env.CLAUDE_API_KEY });
+    const message = await anthropic.messages.create({
+      model: "claude-3-5-haiku-latest",
+      max_tokens: 500,
+      messages: [{
+        role: "user",
+        content: `You are a book search assistant for BookConnect, a digital publishing platform.
+User searched: ${JSON.stringify(query)}. Filters: ${JSON.stringify(filters || {})}.
+Reply ONLY with valid JSON (no markdown):
+{"intent":"one sentence on what the user wants","suggestions":["s1","s2","s3"],"recommendations":[{"title":"T","author":"A","genre":"G","reason":"R"},{"title":"T","author":"A","genre":"G","reason":"R"}]}`,
+      }],
+    });
+    const raw = message.content.filter((b) => b.type === "text").map((b) => b.text).join("").replace(/```json|```/g, "").trim();
+    const parsed = JSON.parse(raw || "{}");
+    res.json({
+      success: true,
+      available: true,
+      intent: String(parsed.intent || ""),
+      suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions.slice(0, 5).map(String) : [],
+      recommendations: Array.isArray(parsed.recommendations) ? parsed.recommendations.slice(0, 4) : [],
+    });
+  } catch (err) {
+    console.error("Search assist failed:", err.message);
+    res.json({ success: true, available: false });
+  }
 });
 
 // 4. POST /api/ai/translate -> Translate text from a source language to a target language

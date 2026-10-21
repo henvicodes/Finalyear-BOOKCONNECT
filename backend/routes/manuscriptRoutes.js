@@ -7,7 +7,11 @@ const Transaction = require("../models/Transaction");
 const { protect, authorize } = require("../middleware/authMiddleware");
 const { snapshotVersion } = require("../utils/versionHistory");
 const { checkPin, pinFailureResponse } = require("../utils/pin");
-const { debit, credit, refund, resolveChainProof } = require("../utils/wallet");
+
+// Statuses an author may set by hand. The review-workflow ones (under_review,
+// seen, cost_proposed, declined) are only ever set by the submit / publisher routes.
+const AUTHOR_SETTABLE_STATUSES = ["draft", "published", "archived"];
+const { debit, credit, refund, resolveChainProof, parseAmount } = require("../utils/wallet");
 
 // 1. POST /api/manuscripts -> Create manuscript (author only)
 router.post("/", protect, authorize("author"), async (req, res) => {
@@ -35,7 +39,7 @@ router.post("/", protect, authorize("author"), async (req, res) => {
     res.status(201).json({ success: true, id: manuscript._id, data: manuscript });
   } catch (error) {
     console.error("Create manuscript error:", error);
-    res.status(500).json({ success: false, message: "Server error", error: error.message });
+    res.status(500).json({ success: false, message: "Server error" });
   }
 });
 
@@ -55,7 +59,7 @@ router.get("/", protect, authorize("author"), async (req, res) => {
 
     res.json({ success: true, data: mapped });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Server error", error: error.message });
+    res.status(500).json({ success: false, message: "Server error" });
   }
 });
 
@@ -106,7 +110,7 @@ router.get("/:id", protect, async (req, res) => {
 
     res.json({ success: true, data: obj });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Server error", error: error.message });
+    res.status(500).json({ success: false, message: "Server error" });
   }
 });
 
@@ -126,13 +130,26 @@ router.put("/:id", protect, authorize("author"), async (req, res) => {
 
     if (title !== undefined) manuscript.title = title;
     if (content !== undefined) manuscript.content = content;
-    if (genre !== undefined) manuscript.genre = genre.toLowerCase();
+    if (typeof genre === "string") manuscript.genre = genre.toLowerCase();
     if (price !== undefined) {
       manuscript.price = parseFloat(price);
       manuscript.isPaid = parseFloat(price) > 0;
     }
-    if (status !== undefined) manuscript.status = status;
-    if (publisher !== undefined) manuscript.publisher = publisher || null;
+    if (status !== undefined) {
+      if (status !== manuscript.status && !AUTHOR_SETTABLE_STATUSES.includes(status)) {
+        return res.status(400).json({ success: false, message: "That status is set automatically by the review process." });
+      }
+      manuscript.status = status;
+    }
+    if (publisher !== undefined) {
+      if (publisher) {
+        const target = await User.findOne({ _id: publisher, role: "publisher" }).select("_id");
+        if (!target) {
+          return res.status(400).json({ success: false, message: "That publisher was not found." });
+        }
+      }
+      manuscript.publisher = publisher || null;
+    }
     if (coverImage !== undefined) manuscript.coverImage = coverImage;
 
     if (content !== undefined || title !== undefined) {
@@ -145,7 +162,7 @@ router.put("/:id", protect, authorize("author"), async (req, res) => {
 
     res.json({ success: true, data: obj });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Server error", error: error.message });
+    res.status(500).json({ success: false, message: "Server error" });
   }
 });
 
@@ -180,12 +197,24 @@ router.post("/:id/submit", protect, authorize("author"), async (req, res) => {
       return res.status(403).json({ success: false, message: "Not authorized" });
     }
 
+    if (!["draft", "declined"].includes(manuscript.status)) {
+      return res.status(400).json({ success: false, message: "This manuscript has already been submitted." });
+    }
+
     const { publisherId } = req.body;
     if (!publisherId && !manuscript.publisher) {
       return res.status(400).json({ success: false, message: "Please select a publisher first" });
     }
+    if (publisherId) {
+      const target = await User.findOne({ _id: publisherId, role: "publisher" }).select("_id");
+      if (!target) {
+        return res.status(400).json({ success: false, message: "That publisher was not found." });
+      }
+    }
 
     manuscript.status = "under_review";
+    manuscript.declineReason = undefined;
+    manuscript.declinedBy = undefined;
     if (publisherId) manuscript.publisher = publisherId;
 
     await manuscript.save();
@@ -202,7 +231,7 @@ router.post("/:id/submit", protect, authorize("author"), async (req, res) => {
     res.json({ success: true, message: "Submitted successfully", data: manuscript });
   } catch (error) {
     console.error("Submit error:", error);
-    res.status(500).json({ success: false, message: "Server error", error: error.message });
+    res.status(500).json({ success: false, message: "Server error" });
   }
 });
 
@@ -214,7 +243,7 @@ router.post("/:id/mark-seen", protect, authorize("publisher"), async (req, res) 
       return res.status(404).json({ success: false, message: "Manuscript not found" });
     }
 
-    if (manuscript.publisher.toString() !== req.user._id.toString()) {
+    if (!manuscript.publisher || manuscript.publisher.toString() !== req.user._id.toString()) {
       return res.status(403).json({ success: false, message: "Not authorized" });
     }
 
@@ -246,16 +275,20 @@ router.post("/:id/propose-cost", protect, authorize("publisher"), async (req, re
       return res.status(404).json({ success: false, message: "Manuscript not found" });
     }
 
-    if (manuscript.publisher.toString() !== req.user._id.toString()) {
+    if (!manuscript.publisher || manuscript.publisher.toString() !== req.user._id.toString()) {
       return res.status(403).json({ success: false, message: "Not authorized" });
     }
 
-    const { cost } = req.body;
-    if (cost === undefined || isNaN(cost)) {
+    if (!["under_review", "seen", "cost_proposed"].includes(manuscript.status)) {
+      return res.status(400).json({ success: false, message: "An offer can only be made on a manuscript that is waiting for review." });
+    }
+
+    const cost = parseAmount(req.body.cost);
+    if (cost === null) {
       return res.status(400).json({ success: false, message: "Valid cost is required" });
     }
 
-    manuscript.publishingCost = parseFloat(cost);
+    manuscript.publishingCost = cost;
     manuscript.status = "cost_proposed";
     await manuscript.save();
 
@@ -264,13 +297,57 @@ router.post("/:id/propose-cost", protect, authorize("publisher"), async (req, re
       sender: req.user._id,
       receiver: manuscript.author,
       book: manuscript._id,
-      content: `PROPOSAL: Publisher has proposed a publishing fee of $${cost}.`,
+      content: `PROPOSAL: Publisher has proposed a publishing fee of $${manuscript.publishingCost}.`,
       isSystem: true
     });
 
     res.json({ success: true, message: "Cost proposal sent successfully", data: manuscript });
   } catch (error) {
     console.error("Propose cost error:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+});
+
+// 8b. POST /api/manuscripts/:id/decline -> Publisher turns a submission down
+router.post("/:id/decline", protect, authorize("publisher"), async (req, res) => {
+  try {
+    const manuscript = await Book.findById(req.params.id);
+    if (!manuscript) {
+      return res.status(404).json({ success: false, message: "Manuscript not found" });
+    }
+    if (!manuscript.publisher || manuscript.publisher.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: "Not authorized" });
+    }
+    if (!["under_review", "seen", "cost_proposed"].includes(manuscript.status)) {
+      return res.status(400).json({ success: false, message: "Only a manuscript waiting for review (or with an open offer) can be declined." });
+    }
+
+    const reason = typeof req.body.reason === "string" ? req.body.reason.trim().slice(0, 500) : "";
+
+    // Claim the decline atomically so it can't race with the author paying an offer.
+    const declined = await Book.findOneAndUpdate(
+      { _id: manuscript._id, publisher: req.user._id, status: { $in: ["under_review", "seen", "cost_proposed"] } },
+      {
+        $set: { status: "declined", declineReason: reason, declinedBy: req.user._id },
+        $unset: { publisher: "", publishingCost: "" },
+      },
+      { new: true }
+    );
+    if (!declined) {
+      return res.status(409).json({ success: false, message: "This manuscript just changed state. Please refresh." });
+    }
+
+    await Message.create({
+      sender: req.user._id,
+      receiver: manuscript.author,
+      book: manuscript._id,
+      content: `DECLINED: The publisher has declined "${manuscript.title}"${reason ? `: ${reason}` : "."} You can edit it and send it to another publisher.`,
+      isSystem: true
+    });
+
+    res.json({ success: true, message: "Submission declined", data: { _id: declined._id, status: declined.status } });
+  } catch (error) {
+    console.error("Decline error:", error);
     res.status(500).json({ success: false, message: "Server error" });
   }
 });
@@ -292,6 +369,9 @@ router.post("/:id/pay-cost", protect, authorize("author"), async (req, res) => {
     }
 
     const cost = manuscript.publishingCost;
+    if (!manuscript.publisher || !Number.isFinite(cost) || cost < 0) {
+      return res.status(400).json({ success: false, message: "There is no valid offer to pay." });
+    }
 
     // Paying the fee spends money, so it needs the wallet PIN.
     const pinCheck = await checkPin(req.user._id, req.body.pin);

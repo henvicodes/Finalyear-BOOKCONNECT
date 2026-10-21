@@ -5,6 +5,7 @@ const express = require("express");
 const dotenv = require("dotenv");
 const cors = require("cors");
 const helmet = require("helmet");
+const cookieParser = require("cookie-parser");
 const { sanitizeBody, rejectBadQuery } = require("./middleware/sanitize");
 const { apiLimiter, authLimiter, walletLimiter } = require("./middleware/rateLimiters");
 
@@ -32,6 +33,7 @@ app.use(
   })
 );
 app.use(express.json({ limit: "5mb" }));
+app.use(cookieParser());
 app.use(sanitizeBody);
 app.use(rejectBadQuery);
 app.use("/api", apiLimiter);

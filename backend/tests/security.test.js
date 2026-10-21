@@ -356,6 +356,61 @@ describe("Ownership checks", () => {
   });
 });
 
+describe("Cookie sessions (browser login)", () => {
+  const email = "cookie-user@example.com";
+  const sessionCookie = (res) =>
+    (res.headers["set-cookie"] || []).find((c) => c.startsWith("bc_session="));
+
+  beforeAll(async () => {
+    await createVerifiedUser({ name: "Cookie User", email, password: pwd, role: "reader" });
+  });
+
+  it("login sets an httpOnly, SameSite session cookie", async () => {
+    const res = await request(app).post("/api/auth/login").send({ email, password: pwd });
+    const cookie = sessionCookie(res);
+    expect(cookie).toBeDefined();
+    expect(cookie).toMatch(/HttpOnly/i);
+    expect(cookie).toMatch(/SameSite=Lax/i);
+  });
+
+  it("the cookie alone authenticates reads", async () => {
+    const agent = request.agent(app);
+    await agent.post("/api/auth/login").send({ email, password: pwd });
+    const res = await agent.get("/api/auth/profile");
+    expect(res.status).toBe(200);
+    expect(res.body.data.email).toBe(email);
+  });
+
+  it("a cookie-authenticated change is refused without the app's request header (CSRF)", async () => {
+    const agent = request.agent(app);
+    await agent.post("/api/auth/login").send({ email, password: pwd });
+
+    const blocked = await agent.put("/api/auth/profile").send({ bio: "hacked" });
+    expect(blocked.status).toBe(403);
+
+    const allowed = await agent.put("/api/auth/profile").set("X-Requested-With", "BookConnect").send({ bio: "fine" });
+    expect(allowed.status).toBe(200);
+  });
+
+  it("logout clears the cookie, after which the session no longer works", async () => {
+    const agent = request.agent(app);
+    await agent.post("/api/auth/login").send({ email, password: pwd });
+    const out = await agent.post("/api/auth/logout").set("X-Requested-With", "BookConnect");
+    expect(out.status).toBe(200);
+    const res = await agent.get("/api/auth/profile");
+    expect(res.status).toBe(401);
+  });
+
+  it("an explicit Bearer token (API clients) still works without the CSRF header", async () => {
+    const login = await request(app).post("/api/auth/login").send({ email, password: pwd });
+    const res = await request(app)
+      .put("/api/auth/profile")
+      .set(auth(login.body.data.token))
+      .send({ bio: "via bearer" });
+    expect(res.status).toBe(200);
+  });
+});
+
 describe("Socket.io authentication", () => {
   let server, io, port, tokenA, idA, idB;
 

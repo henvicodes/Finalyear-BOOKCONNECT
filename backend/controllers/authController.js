@@ -3,6 +3,7 @@ const generateToken = require("../utils/generateToken");
 const { generateOTP, generateOTPExpiry, hashOTP, otpMatches, MAX_OTP_ATTEMPTS } = require("../utils/otpGenerator");
 // Used as a module object (not destructured) so tests can replace sendOTPEmail.
 const emailService = require("../services/emailService");
+const { setAuthCookie, clearAuthCookie } = require("../utils/authCookie");
 
 // In development, when SMTP isn't working, print the code so sign-up can still be
 // tested. Never in production — a log file is not a safe place for a login code.
@@ -169,7 +170,10 @@ const verifyOTPAndRegister = async (req, res) => {
 
     await user.save();
 
-    // Generate token and return user data
+    // Sign the user in: httpOnly cookie for the browser app, and the token in
+    // the body for non-browser API clients.
+    const sessionToken = generateToken(user._id, user.role);
+    setAuthCookie(res, sessionToken);
     res.status(201).json({
       success: true,
       message: "Email verified successfully! Registration complete.",
@@ -181,7 +185,7 @@ const verifyOTPAndRegister = async (req, res) => {
         profilePicture: user.profilePicture,
         isVerified: user.isVerified,
         isEmailVerified: user.isEmailVerified,
-        token: generateToken(user._id, user.role),
+        token: sessionToken,
       },
     });
   } catch (error) {
@@ -254,6 +258,12 @@ const resendOTP = async (req, res) => {
   }
 };
 
+// POST /api/auth/logout - ends the browser session by clearing the cookie
+const logoutUser = (req, res) => {
+  clearAuthCookie(res);
+  res.json({ success: true, message: "Logged out" });
+};
+
 const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -286,6 +296,8 @@ const loginUser = async (req, res) => {
       });
     }
 
+    const sessionToken = generateToken(user._id, user.role);
+    setAuthCookie(res, sessionToken);
     res.json({
       success: true,
       data: {
@@ -297,7 +309,7 @@ const loginUser = async (req, res) => {
         isVerified: user.isVerified,
         walletBalance: user.walletBalance,
         earnings: user.earnings,
-        token: generateToken(user._id, user.role),
+        token: sessionToken,
       },
     });
   } catch (error) {
@@ -444,6 +456,7 @@ module.exports = {
   verifyOTPAndRegister,
   resendOTP,
   loginUser,
+  logoutUser,
   getUserProfile,
   updateUserProfile,
   linkWallet,

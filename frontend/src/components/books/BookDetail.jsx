@@ -22,7 +22,7 @@ const BookDetail = () => {
   const [translateError, setTranslateError] = useState("");
 
   const { book, loading: bookLoading, error: bookError } = useBook(id);
-  const { chapters, loading: chaptersLoading } = useChapters(id);
+  const { chapters } = useChapters(id);
   const {
     chapter: selectedChapter,
     loading: contentLoading,

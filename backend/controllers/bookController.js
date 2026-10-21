@@ -261,6 +261,11 @@ const updateBook = async (req, res) => {
       "status",
     ];
 
+    // The review-workflow statuses are set by the submit/publisher routes only.
+    if (req.body.status !== undefined && req.body.status !== book.status && !["draft", "published", "archived"].includes(req.body.status)) {
+      return res.status(400).json({ success: false, message: "That status is set automatically by the review process." });
+    }
+
     allowedFields.forEach((field) => {
       if (req.body[field] !== undefined) {
         book[field] = req.body[field];

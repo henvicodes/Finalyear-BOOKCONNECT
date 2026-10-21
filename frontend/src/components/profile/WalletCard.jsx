@@ -44,7 +44,7 @@ const WalletCard = ({ user }) => {
   const [connectError, setConnectError] = useState("");
   const [metamaskInstalled, setMetamaskInstalled] = useState(true);
 
-  const token = user?.token || localStorage.getItem("token");
+  const token = user?.token;
 
   // Sync wallet UI state from the current user on every login/account
   // switch — always, not just when they happen to have a linked wallet.

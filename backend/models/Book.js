@@ -75,7 +75,7 @@ const bookSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["draft", "under_review", "seen", "cost_proposed", "published", "archived"],
+      enum: ["draft", "under_review", "seen", "cost_proposed", "declined", "published", "archived"],
       default: "draft",
     },
     isPaid: {
@@ -113,6 +113,10 @@ const bookSchema = new mongoose.Schema(
     onChainTxHash: { type: String },
     onChainNetwork: { type: String },
     // Publisher association (optional)
+    // Set when a publisher turns a submission down (the author can edit and
+    // send it to someone else).
+    declineReason: { type: String, maxlength: 500 },
+    declinedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     publisher: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",

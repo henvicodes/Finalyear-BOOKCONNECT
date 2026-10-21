@@ -1,4 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
+import axios from "axios";
+import { APP_HEADERS } from "../utils/session";
 import { Link, useNavigate } from "react-router-dom";
 import {
   BookOpen, Menu, X, User, ChevronDown, Settings, LogOut,
@@ -55,12 +57,12 @@ const SearchBar = () => {
         const params = new URLSearchParams({ search: query, limit: 4 });
         if (filters.genre) params.append("genre", filters.genre.toLowerCase());
         if (filters.type)  params.append("isPaid", filters.type === "Paid" ? "true" : "false");
-        const token = JSON.parse(localStorage.getItem("user") || "{}").token;
-        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        // Auth is the httpOnly session cookie, sent via credentials: "include".
+        const opts = { credentials: "include", headers: APP_HEADERS };
 
         const [booksRes, usersRes] = await Promise.all([
-          fetch(`${BASE_URL}/api/books?${params}`, { headers }).then(r => r.json()).catch(() => ({ data: [] })),
-          fetch(`${BASE_URL}/api/auth/search?q=${query}`, { headers }).then(r => r.json()).catch(() => ({ data: [] })),
+          fetch(`${BASE_URL}/api/books?${params}`, opts).then(r => r.json()).catch(() => ({ data: [] })),
+          fetch(`${BASE_URL}/api/auth/search?q=${encodeURIComponent(query)}`, opts).then(r => r.json()).catch(() => ({ data: [] })),
         ]);
         setBooks(booksRes.data?.slice(0, 4) || []);
         setAuthors(usersRes.data?.slice(0, 3) || []);
@@ -70,24 +72,8 @@ const SearchBar = () => {
       // AI recommendations
       setAiLoading(true);
       try {
-        const res = await fetch("https://api.anthropic.com/v1/messages", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            model: "claude-sonnet-4-20250514",
-            max_tokens: 500,
-            messages: [{
-              role: "user",
-              content: `You are a book recommendation assistant for BookConnect, an Indian digital publishing platform.
-User searched: "${query}". Filters: ${JSON.stringify(filters)}.
-Reply ONLY valid JSON (no markdown):
-{"intent":"one sentence what user wants","suggestions":["s1","s2","s3"],"recommendations":[{"title":"T","author":"A","genre":"G","reason":"R"},{"title":"T","author":"A","genre":"G","reason":"R"}]}`
-            }]
-          })
-        });
-        const data   = await res.json();
-        const text   = data.content?.[0]?.text?.replace(/```json|```/g, "").trim() || "{}";
-        const parsed = JSON.parse(text);
+        const { data } = await axios.post(`${BASE_URL}/api/ai/search-assist`, { query, filters });
+        const parsed = data.available ? data : {};
         setIntent(parsed.intent || "");
         setAiSuggestions(parsed.suggestions || []);
         setAiRecs(parsed.recommendations || []);

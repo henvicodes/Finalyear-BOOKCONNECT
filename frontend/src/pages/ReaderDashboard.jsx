@@ -26,7 +26,6 @@ import { payOnChainIfLinked } from "../services/chainPayment";
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 // Format helper
-const fmt = (n) => n >= 1000 ? (n / 1000).toFixed(1) + "K" : String(n || 0);
 
 // Stat Card
 const StatCard = ({ icon, label, value, color }) => (
@@ -48,7 +47,6 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
   const [balancePinOpen, setBalancePinOpen] = useState(false);
   const [purchasePinOpen, setPurchasePinOpen] = useState(false);
   const [pendingPurchaseBook, setPendingPurchaseBook] = useState(null);
-  const [loadingLib, setLoadingLib] = useState(false);
 
   // Discover Marketplace
   const [discoverBooks, setDiscoverBooks] = useState([]);
@@ -152,7 +150,6 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
   }, [activeChapterIdx, selectedBook?._id]);
 
   const fetchLibrary = async () => {
-    setLoadingLib(true);
     try {
       const { data } = await axios.get(`${BASE_URL}/api/reader/user/library`, {
         headers: { Authorization: `Bearer ${token}` }
@@ -162,8 +159,6 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
       }
     } catch (err) {
       console.error("Library fetch error:", err);
-    } finally {
-      setLoadingLib(false);
     }
   };
 
@@ -446,7 +441,7 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
         }
         fetchDiscoverBooks(selectedGenre, searchQuery);
       }
-    } catch (err) {
+    } catch {
       alert("Error submitting rating.");
     }
   };
@@ -473,7 +468,7 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
         }
         fetchDiscoverBooks(selectedGenre, searchQuery);
       }
-    } catch (err) {
+    } catch {
       alert("Error submitting review.");
     } finally {
       setSubmittingReview(false);
@@ -499,7 +494,7 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
         setSelectedBook(updatedBookRes.data.data);
       }
       fetchDiscoverBooks(selectedGenre, searchQuery);
-    } catch (err) {
+    } catch {
       alert("Error clearing review.");
     } finally {
       setSubmittingReview(false);

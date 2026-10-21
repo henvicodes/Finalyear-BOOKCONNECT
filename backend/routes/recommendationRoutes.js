@@ -4,6 +4,41 @@ const Book = require("../models/Book");
 const User = require("../models/User");
 const { protect } = require("../middleware/authMiddleware");
 const { tokenize, computeIDF, tfidfVector, cosineSimilarity } = require("../utils/textSimilarity");
+const { buildItemCF, IMPLICIT_PURCHASE_RATING } = require("../utils/itemCF");
+
+// How much each signal counts when both are available.
+const CONTENT_WEIGHT = 0.6;
+const CF_WEIGHT = 0.4;
+
+// Builds the item-based collaborative-filtering model from every reader's
+// ratings plus purchases (a purchase with no rating counts as a "liked").
+async function loadCollaborativeModel() {
+  const [books, buyers] = await Promise.all([
+    Book.find({ status: "published" }).select("title ratings.user ratings.rating").lean(),
+    User.find({ "purchasedBooks.0": { $exists: true } }).select("purchasedBooks").lean(),
+  ]);
+
+  const titles = new Map(books.map((b) => [b._id.toString(), b.title]));
+  const published = new Set(titles.keys());
+  const seen = new Set();
+  const interactions = [];
+
+  for (const b of books) {
+    for (const r of b.ratings || []) {
+      if (!r.user || !r.rating) continue;
+      seen.add(`${r.user}:${b._id}`);
+      interactions.push({ user: r.user.toString(), item: b._id.toString(), rating: r.rating });
+    }
+  }
+  for (const u of buyers) {
+    for (const id of u.purchasedBooks) {
+      const item = id.toString();
+      if (!published.has(item) || seen.has(`${u._id}:${item}`)) continue;
+      interactions.push({ user: u._id.toString(), item, rating: IMPLICIT_PURCHASE_RATING });
+    }
+  }
+  return { cf: buildItemCF(interactions), titles };
+}
 
 // Flatten a book document into one text blob capturing its topical content —
 // used both to build the reader's taste profile and to score candidates.
@@ -33,7 +68,10 @@ router.get("/", protect, async (req, res) => {
     }
 
     const purchasedIds = new Set((user.purchasedBooks || []).map((b) => b._id.toString()));
-    const unpurchased = candidates.filter((b) => !purchasedIds.has(b._id.toString()));
+    // Don't recommend what the reader already bought OR already rated.
+    const alreadyRated = await Book.find({ "ratings.user": userId }).select("_id").lean();
+    const haveIds = new Set([...purchasedIds, ...alreadyRated.map((b) => b._id.toString())]);
+    const unpurchased = candidates.filter((b) => !haveIds.has(b._id.toString()));
 
     // Books the reader has rated highly (4-5 stars) are a strong taste signal
     // too, even if they didn't purchase them (e.g. free books).
@@ -78,21 +116,56 @@ router.get("/", protect, async (req, res) => {
     const profileVector = vectors[0];
     const candidateVectors = vectors.slice(1);
 
+    // Content signal: TF-IDF similarity between the reader's taste profile and each book.
+    const contentScore = new Map();
+    unpurchased.forEach((book, i) => {
+      const score = cosineSimilarity(profileVector, candidateVectors[i]);
+      if (score > 0) contentScore.set(book._id.toString(), score);
+    });
+
+    // Collaborative signal: "readers with similar ratings liked this" (needs a few
+    // readers with 2+ rated/bought books; otherwise it adds nothing and is skipped).
+    let cfScore = new Map();
+    let cfBecause = new Map();
+    let titles = new Map();
+    try {
+      const model = await loadCollaborativeModel();
+      titles = model.titles;
+      if (model.cf.hasSignal) {
+        const ranked = model.cf.recommend(userId.toString(), unpurchased.map((b) => b._id.toString()), unpurchased.length);
+        cfScore = new Map(ranked.map((r) => [r.item, r.score]));
+        cfBecause = new Map(ranked.map((r) => [r.item, r.because]));
+      }
+    } catch (cfErr) {
+      console.error("Collaborative filtering skipped:", cfErr.message);
+    }
+
+    const maxContent = Math.max(0, ...contentScore.values());
+    const maxCf = Math.max(0, ...cfScore.values());
+    const useCf = maxCf > 0;
+
     const scored = unpurchased
-      .map((book, i) => ({
-        book,
-        score: cosineSimilarity(profileVector, candidateVectors[i]),
-      }))
+      .map((book) => {
+        const id = book._id.toString();
+        const c = maxContent > 0 ? (contentScore.get(id) || 0) / maxContent : 0;
+        const f = useCf ? (cfScore.get(id) || 0) / maxCf : 0;
+        const score = useCf ? CONTENT_WEIGHT * c + CF_WEIGHT * f : c;
+        const becauseTitle = titles.get(cfBecause.get(id));
+        const cfLed = useCf && f > 0 && becauseTitle; // the more specific explanation wins
+        return {
+          book,
+          score,
+          reason: cfLed
+            ? `Readers who liked "${becauseTitle}" also liked this`
+            : book.genre
+              ? `Matches your interest in ${book.genre}`
+              : "Similar to books you've read",
+        };
+      })
       .filter((r) => r.score > 0)
       .sort((a, b) => b.score - a.score)
       .slice(0, 12)
-      .map((r) => ({
-        book: r.book,
-        score: Math.round(r.score * 1000) / 1000,
-        reason: r.book.genre
-          ? `Matches your interest in ${r.book.genre}`
-          : "Similar to books you've read",
-      }));
+      .map((r) => ({ ...r, score: Math.round(r.score * 1000) / 1000 }));
 
     // If content similarity found nothing (e.g. very sparse vocabulary
     // overlap), still fall back to trending rather than an empty page.
@@ -104,7 +177,7 @@ router.get("/", protect, async (req, res) => {
       return res.json({ success: true, data: trending, personalized: false });
     }
 
-    res.json({ success: true, data: scored, personalized: true });
+    res.json({ success: true, data: scored, personalized: true, collaborative: useCf });
   } catch (error) {
     console.error("Recommendation error:", error);
     res.status(500).json({ success: false, message: "Server error" });

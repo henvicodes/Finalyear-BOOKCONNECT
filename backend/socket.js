@@ -1,6 +1,22 @@
 const { Server } = require("socket.io");
 const jwt = require("jsonwebtoken");
+const { COOKIE_NAME } = require("./utils/authCookie");
 const User = require("./models/User");
+
+// Reads one cookie out of the raw Cookie header.
+const readCookie = (header, name) => {
+  for (const part of (header || "").split(";")) {
+    const i = part.indexOf("=");
+    if (i > 0 && part.slice(0, i).trim() === name) {
+      try {
+        return decodeURIComponent(part.slice(i + 1).trim());
+      } catch {
+        return null;
+      }
+    }
+  }
+  return null;
+};
 
 // Real-time layer. Every socket must present the same JWT used for the REST API
 // in the connection handshake; the user id comes from the verified token, never
@@ -17,7 +33,10 @@ function attachSocket(server) {
 
   io.use(async (socket, next) => {
     try {
-      const token = socket.handshake.auth && socket.handshake.auth.token;
+      // Browser: the httpOnly session cookie. Other clients: auth.token.
+      const token =
+        readCookie(socket.handshake.headers.cookie, COOKIE_NAME) ||
+        (socket.handshake.auth && socket.handshake.auth.token);
       if (!token) return next(new Error("Not authorized"));
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       const user = await User.findById(decoded.id).select("_id");
