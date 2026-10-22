@@ -3,6 +3,9 @@ const router = express.Router();
 const Book = require("../models/Book");
 const { protect } = require("../middleware/authMiddleware");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
+const Anthropic = require("@anthropic-ai/sdk");
+const { tokenize, computeIDF, tfidfVector, cosineSimilarity } = require("../utils/textSimilarity");
+const { scoreGenres, knownWordCount, getModelInfo } = require("../utils/genreClassifier");
 
 // Helper to count syllables in a word
 function countSyllables(word) {
@@ -14,12 +17,66 @@ function countSyllables(word) {
   return vowels ? vowels.length : 1;
 }
 
+// Real plagiarism scan: TF-IDF + cosine similarity between the submitted
+// text and the actual content of other published manuscripts — not a
+// genre/title-length guess. Returns the highest similarity found and the
+// top matches above a "worth flagging" threshold.
+const SIMILARITY_FLAG_THRESHOLD = 0.15; // cosine similarity, 0-1
+
+async function scanPlagiarism(text, excludeBookId) {
+  const query = { status: "published" };
+  if (excludeBookId) query._id = { $ne: excludeBookId };
+
+  const otherBooks = await Book.find(query)
+    .select("title content description author")
+    .populate("author", "name")
+    .limit(200); // cap corpus size so this stays fast on a growing catalog
+
+  const otherTexts = otherBooks.map((b) => b.content || b.description || "");
+  if (otherTexts.every((t) => !t.trim())) {
+    return { plagiarismScore: 0, plagiarismMatches: [] };
+  }
+
+  // Build one shared corpus (submission + every candidate) so IDF weights
+  // are computed consistently, then compare the submission's vector
+  // against each candidate's.
+  const allDocs = [text, ...otherTexts];
+  const tokenizedDocs = allDocs.map(tokenize);
+  const idf = computeIDF(tokenizedDocs);
+  const vectors = tokenizedDocs.map((tokens) => tfidfVector(tokens, idf));
+
+  const submissionVector = vectors[0];
+  const candidateVectors = vectors.slice(1);
+
+  const scored = otherBooks
+    .map((book, i) => ({
+      title: book.title,
+      author: book.author?.name || "Unknown",
+      similarity: Math.round(cosineSimilarity(submissionVector, candidateVectors[i]) * 100),
+    }))
+    .filter((m) => m.similarity / 100 >= SIMILARITY_FLAG_THRESHOLD)
+    .sort((a, b) => b.similarity - a.similarity)
+    .slice(0, 5);
+
+  const highestSimilarity = scored.length > 0 ? scored[0].similarity : 0;
+  return { plagiarismScore: highestSimilarity, plagiarismMatches: scored };
+}
+
 // 1. POST /api/ai/evaluate/:id -> Calculate readability & scan plagiarism
 router.post("/evaluate/:id", protect, async (req, res) => {
   try {
     const book = await Book.findById(req.params.id);
     if (!book) {
       return res.status(404).json({ success: false, message: "Manuscript not found" });
+    }
+
+    // Evaluating saves scores onto the book, so only its author or the
+    // publisher it was sent to may run it.
+    const uid = req.user._id.toString();
+    const isOwner = book.author.toString() === uid;
+    const isAssignedPublisher = book.publisher && book.publisher.toString() === uid;
+    if (!isOwner && !isAssignedPublisher) {
+      return res.status(403).json({ success: false, message: "Not authorized to evaluate this manuscript" });
     }
 
     const text = book.content || book.description || "";
@@ -66,31 +123,12 @@ router.post("/evaluate/:id", protect, async (req, res) => {
     const quality = Math.round(75 + (readabilityValue * 0.2) + (wordCount % 5));
     const finalQualityScore = Math.min(100, Math.max(50, quality));
 
-    // Plagiarism Detection simulation against other books in the platform database
-    const otherBooks = await Book.find({ _id: { $ne: book._id }, status: "published" }).populate("author", "name");
-    const plagiarismMatches = [];
-    let highestSimilarity = 0;
-
-    otherBooks.forEach(other => {
-      // Let's do a simple mock overlap calculation using shared tags/genre
-      let matchPercent = 0;
-      if (other.genre === book.genre) matchPercent += 10;
-      // Add dynamic noise based on title length
-      matchPercent += (other.title.length + book.title.length) % 8;
-      
-      if (matchPercent > 12) {
-        plagiarismMatches.push({
-          title: other.title,
-          author: other.author?.name || "Unknown",
-          similarity: matchPercent
-        });
-        if (matchPercent > highestSimilarity) highestSimilarity = matchPercent;
-      }
-    });
+    // Plagiarism scan: TF-IDF + cosine similarity against other published manuscripts' actual content
+    const { plagiarismScore, plagiarismMatches } = await scanPlagiarism(text, book._id);
 
     book.qualityScore = finalQualityScore;
     book.readabilityScore = readabilityLabel;
-    book.plagiarismScore = highestSimilarity;
+    book.plagiarismScore = plagiarismScore;
     book.plagiarismMatches = plagiarismMatches;
     await book.save();
 
@@ -98,7 +136,7 @@ router.post("/evaluate/:id", protect, async (req, res) => {
       success: true,
       qualityScore: finalQualityScore,
       readabilityScore: readabilityLabel,
-      plagiarismScore: highestSimilarity,
+      plagiarismScore,
       plagiarismMatches
     });
   } catch (error) {
@@ -182,14 +220,14 @@ router.post("/assist", protect, async (req, res) => {
     res.json({ success: true, suggestion });
   } catch (error) {
     console.error("AI Assist Route error:", error);
-    res.status(500).json({ success: false, message: "Server error", error: error.message });
+    res.status(500).json({ success: false, message: "Server error" });
   }
 });
 
 // 3. POST /api/ai/evaluate-raw -> Calculate readability & scan plagiarism on raw unsaved text
 router.post("/evaluate-raw", protect, async (req, res) => {
   try {
-    const { text, title, genre } = req.body;
+    const { text } = req.body;
     if (!text || !text.trim()) {
       return res.status(400).json({ success: false, message: "Text content is required" });
     }
@@ -229,35 +267,200 @@ router.post("/evaluate-raw", protect, async (req, res) => {
     const quality = Math.round(75 + (readabilityValue * 0.2) + (wordCount % 5));
     const finalQualityScore = Math.min(100, Math.max(50, quality));
 
-    // Plagiarism scan against existing published books
-    const otherBooks = await Book.find({ status: "published" }).populate("author", "name");
-    const plagiarismMatches = [];
-    let highestSimilarity = 0;
-
-    otherBooks.forEach(other => {
-      let matchPercent = 0;
-      if (other.genre === genre) matchPercent += 10;
-      matchPercent += (other.title.length + (title?.length || 0)) % 8;
-      
-      if (matchPercent > 12) {
-        plagiarismMatches.push({
-          title: other.title,
-          author: other.author?.name || "Unknown",
-          similarity: matchPercent
-        });
-        if (matchPercent > highestSimilarity) highestSimilarity = matchPercent;
-      }
-    });
+    // Plagiarism scan: TF-IDF + cosine similarity against other published manuscripts' actual content
+    const { plagiarismScore, plagiarismMatches } = await scanPlagiarism(text, null);
 
     res.json({
       success: true,
       qualityScore: finalQualityScore,
       readabilityScore: readabilityLabel,
-      plagiarismScore: highestSimilarity,
+      plagiarismScore,
       plagiarismMatches
     });
   } catch (error) {
     console.error("AI raw scan error:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+});
+
+// Supported target languages — ISO 639-1 codes, weighted toward the
+// platform's India-centric catalog plus major world languages.
+const SUPPORTED_LANGUAGES = {
+  hindi: "hi", marathi: "mr", bengali: "bn", tamil: "ta", telugu: "te",
+  gujarati: "gu", kannada: "kn", malayalam: "ml", punjabi: "pa",
+  spanish: "es", french: "fr", german: "de", chinese: "zh", japanese: "ja",
+  arabic: "ar", english: "en",
+};
+
+// 3b. POST /api/ai/suggest-genre -> Genre suggestions from a trained model.
+// Uses the classifier trained on the CMU Book Summary Dataset
+// (see ml/train_genre_classifier.py) — a real trained model, not a heuristic.
+router.post("/suggest-genre", protect, (req, res) => {
+  const { text } = req.body;
+  // The model can only judge text it has vocabulary for; with a couple of
+  // words it would still return numbers, just meaningless ones.
+  if (!text || knownWordCount(text) < 25) {
+    return res.status(400).json({
+      success: false,
+      message: "Write or paste a longer passage (a paragraph or more) so a genre can be suggested.",
+    });
+  }
+  const suggestions = scoreGenres(text)
+    .slice(0, 3)
+    .map((s) => ({ genre: s.genre, probability: Math.round(s.probability * 1000) / 1000 }));
+  res.json({ success: true, suggestions, model: getModelInfo() });
+});
+
+// 3b. POST /api/ai/search-assist -> Optional search suggestions (needs CLAUDE_API_KEY).
+// The key stays on the server; the browser never talks to Anthropic directly.
+// Without a key it simply reports available:false and the UI hides the box.
+router.post("/search-assist", protect, async (req, res) => {
+  const { query, filters } = req.body;
+  if (typeof query !== "string" || !query.trim() || query.length > 200) {
+    return res.status(400).json({ success: false, message: "A short search query is required" });
+  }
+  if (!process.env.CLAUDE_API_KEY) {
+    return res.json({ success: true, available: false });
+  }
+  try {
+    const anthropic = new Anthropic({ apiKey: process.env.CLAUDE_API_KEY });
+    const message = await anthropic.messages.create({
+      model: "claude-3-5-haiku-latest",
+      max_tokens: 500,
+      messages: [{
+        role: "user",
+        content: `You are a book search assistant for BookConnect, a digital publishing platform.
+User searched: ${JSON.stringify(query)}. Filters: ${JSON.stringify(filters || {})}.
+Reply ONLY with valid JSON (no markdown):
+{"intent":"one sentence on what the user wants","suggestions":["s1","s2","s3"],"recommendations":[{"title":"T","author":"A","genre":"G","reason":"R"},{"title":"T","author":"A","genre":"G","reason":"R"}]}`,
+      }],
+    });
+    const raw = message.content.filter((b) => b.type === "text").map((b) => b.text).join("").replace(/```json|```/g, "").trim();
+    const parsed = JSON.parse(raw || "{}");
+    res.json({
+      success: true,
+      available: true,
+      intent: String(parsed.intent || ""),
+      suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions.slice(0, 5).map(String) : [],
+      recommendations: Array.isArray(parsed.recommendations) ? parsed.recommendations.slice(0, 4) : [],
+    });
+  } catch (err) {
+    console.error("Search assist failed:", err.message);
+    res.json({ success: true, available: false });
+  }
+});
+
+// 4. POST /api/ai/translate -> Translate text from a source language to a target language
+router.post("/translate", protect, async (req, res) => {
+  try {
+    const { text, targetLanguage, sourceLanguage } = req.body;
+    if (!text || !text.trim()) {
+      return res.status(400).json({ success: false, message: "Text content is required" });
+    }
+    const langKey = (targetLanguage || "").toLowerCase();
+    const langCode = SUPPORTED_LANGUAGES[langKey];
+    if (!langCode) {
+      return res.status(400).json({
+        success: false,
+        message: `Unsupported target language. Choose one of: ${Object.keys(SUPPORTED_LANGUAGES).join(", ")}`,
+      });
+    }
+
+    // Defaults to English since most of the catalog is English, but a book
+    // stored with a different `language` (e.g. Hindi) should pass that as
+    // sourceLanguage — otherwise "translate to English" on a Hindi book
+    // would be treated as English-to-English and do nothing.
+    const srcKey = (sourceLanguage || "english").toLowerCase();
+    const srcCode = SUPPORTED_LANGUAGES[srcKey] || "en";
+    if (srcCode === langCode) {
+      return res.status(400).json({ success: false, message: "Source and target language are the same." });
+    }
+
+    // 1. Claude, if configured — the primary translation provider (highest
+    // quality, no shared free-tier quota to run out of).
+    if (process.env.CLAUDE_API_KEY) {
+      try {
+        const anthropic = new Anthropic({ apiKey: process.env.CLAUDE_API_KEY });
+        const message = await anthropic.messages.create({
+          model: "claude-3-5-haiku-latest",
+          max_tokens: 4096,
+          messages: [{
+            role: "user",
+            content: `Translate the following text from ${srcKey} to ${langKey}. Return ONLY the translation, no notes or explanations:\n\n"${text}"`,
+          }],
+        });
+        const translatedText = message.content
+          .filter((block) => block.type === "text")
+          .map((block) => block.text)
+          .join("")
+          .trim();
+        if (translatedText) {
+          return res.json({ success: true, translatedText, targetLanguage: langKey, provider: "claude" });
+        }
+      } catch (claudeErr) {
+        console.error("Claude translation failed, falling back:", claudeErr);
+      }
+    }
+
+    // 2. Gemini, if configured — secondary provider.
+    if (process.env.GEMINI_API_KEY) {
+      try {
+        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const prompt = `Translate the following text from ${srcKey} to ${langKey}. Return ONLY the translation, no notes or explanations:\n\n"${text}"`;
+        const result = await model.generateContent(prompt);
+        const translatedText = result.response.text().trim();
+        return res.json({ success: true, translatedText, targetLanguage: langKey, provider: "gemini" });
+      } catch (geminiErr) {
+        console.error("Gemini translation failed, falling back:", geminiErr);
+      }
+    }
+
+    // 3. MyMemory — a free, keyless machine-translation API. Real translation
+    // (not a fake/mock), used specifically because it needs no API key, so
+    // the feature still works out of the box without CLAUDE_API_KEY/GEMINI_API_KEY set.
+    // Chunked to stay under MyMemory's ~500-char-per-request limit.
+    try {
+      const chunks = text.match(/[\s\S]{1,450}(?:\s|$)/g) || [text];
+      const translatedChunks = [];
+      for (const chunk of chunks) {
+        const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(chunk)}&langpair=${srcCode}|${langCode}`;
+        const response = await fetch(url);
+        const data = await response.json();
+        if (data.responseStatus === 429 || /QUOTA|LIMIT/i.test(data.responseDetails || "")) {
+          const quotaErr = new Error(data.responseDetails || "MyMemory daily quota exceeded");
+          quotaErr.isQuota = true;
+          throw quotaErr;
+        }
+        if (data.responseStatus !== 200 || !data.responseData?.translatedText) {
+          throw new Error("MyMemory translation failed for a chunk");
+        }
+        translatedChunks.push(data.responseData.translatedText);
+      }
+      return res.json({
+        success: true,
+        translatedText: translatedChunks.join(" "),
+        targetLanguage: langKey,
+        provider: "mymemory",
+      });
+    } catch (fallbackErr) {
+      console.error("Fallback translation failed:", fallbackErr);
+      // MyMemory's free tier is a shared daily quota per IP, not per-user —
+      // heavy testing can exhaust it for everyone until it resets. Say so
+      // plainly instead of a generic error, since it isn't a real outage.
+      if (fallbackErr.isQuota) {
+        return res.status(429).json({
+          success: false,
+          message: "The free translation service has hit its shared daily limit and will reset in a few hours. Add a CLAUDE_API_KEY to backend/.env for reliable, unlimited translation instead.",
+        });
+      }
+      return res.status(502).json({
+        success: false,
+        message: "Translation is temporarily unavailable. Please try again shortly.",
+      });
+    }
+  } catch (error) {
+    console.error("Translate route error:", error);
     res.status(500).json({ success: false, message: "Server error" });
   }
 });

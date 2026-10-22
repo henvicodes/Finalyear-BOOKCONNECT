@@ -77,23 +77,24 @@ export const useBook = (id) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
+  const fetchBook = useCallback(async () => {
     if (!id) return;
-    const fetchBook = async () => {
-      setLoading(true);
-      try {
-        const { data } = await api.get(`/api/books/${id}`);
-        if (data.success) setBook(data.data);
-      } catch (err) {
-        setError(err.response?.data?.message || "Failed to load book");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchBook();
+    setLoading(true);
+    try {
+      const { data } = await api.get(`/api/books/${id}`);
+      if (data.success) setBook(data.data);
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to load book");
+    } finally {
+      setLoading(false);
+    }
   }, [id]);
 
-  return { book, loading, error, refetch: () => fetchBook() };
+  useEffect(() => {
+    fetchBook();
+  }, [fetchBook]);
+
+  return { book, loading, error, refetch: fetchBook };
 };
 
 export const useChapters = (bookId) => {
@@ -128,11 +129,16 @@ export const useChapterContent = (bookId, chapterId) => {
   const [chapter, setChapter] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  // Set to { price } when the API blocks the request because this is a
+  // paid book the reader hasn't purchased yet, so the UI can show a
+  // paywall instead of a generic error.
+  const [requiresPurchase, setRequiresPurchase] = useState(null);
 
   const fetchChapterContent = useCallback(async () => {
     if (!bookId || !chapterId) return;
     setLoading(true);
     setError(null);
+    setRequiresPurchase(null);
     try {
       const { data } = await api.get(
         `/api/books/${bookId}/chapters/${chapterId}`,
@@ -141,7 +147,11 @@ export const useChapterContent = (bookId, chapterId) => {
         setChapter(data.data.chapter);
       }
     } catch (err) {
-      setError(err.response?.data?.message || "Failed to load chapter content");
+      if (err.response?.data?.requiresPurchase) {
+        setRequiresPurchase({ price: err.response.data.price });
+      } else {
+        setError(err.response?.data?.message || "Failed to load chapter content");
+      }
     } finally {
       setLoading(false);
     }
@@ -151,7 +161,7 @@ export const useChapterContent = (bookId, chapterId) => {
     fetchChapterContent();
   }, [fetchChapterContent]);
 
-  return { chapter, loading, error, refetch: fetchChapterContent };
+  return { chapter, loading, error, requiresPurchase, refetch: fetchChapterContent };
 };
 
 export const useCreateBook = () => {

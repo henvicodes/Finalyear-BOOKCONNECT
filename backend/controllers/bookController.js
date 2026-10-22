@@ -1,33 +1,70 @@
 const Book = require("../models/Book");
+const { snapshotVersion } = require("../utils/versionHistory");
+
+// Weighted ranking formula: Final Score = α·UserRating + β·AIQualityScore + γ·EngagementScore
+// Each term is normalized to 0-100 before weighting, so the weights below
+// (which sum to 1) can be read directly as "how much each factor matters".
+const RANK_WEIGHTS = { rating: 0.5, quality: 0.3, engagement: 0.2 };
 
 const getBooks = async (req, res) => {
   try {
     const {
       search,
       genre,
-      status = "published",
       page = 1,
       limit = 12,
-      sort = "-createdAt",
+      sort: requestedSort = "-createdAt",
       author,
+      isPaid,
     } = req.query;
 
-    const query = { status };
+    // Only these sort orders are allowed (a free-form sort string would let a client
+    // order by any field, including private ones).
+    const SORTS = ["-createdAt", "createdAt", "price", "-price", "title", "-title", "-averageRating", "-totalReads", "ranked"];
+    const sort = SORTS.includes(requestedSort) ? requestedSort : "-createdAt";
+
+    // This public list only ever shows PUBLISHED books. It used to honour a
+    // ?status= filter, which let anyone list other people's drafts and
+    // manuscripts under review (publishers have their own inbox:
+    // GET /api/manuscripts/submissions).
+    const query = { status: "published" };
 
     if (genre) query.genre = genre;
     if (author) query.author = author;
-    if (search) {
-      query.$or = [
-        { title: { $regex: search, $options: "i" } },
-        { description: { $regex: search, $options: "i" } },
-        { tags: { $regex: search, $options: "i" } },
-      ];
+    // Free / paid filter: ?isPaid=true shows only paid books, ?isPaid=false only free ones
+    if (isPaid === "true") {
+      query.isPaid = true;
+      query.price = { $gt: 0 };
+    } else if (isPaid === "false") {
+      query.$and = [...(query.$and || []), { $or: [{ isPaid: { $ne: true } }, { price: { $not: { $gt: 0 } } }] }];
+    }
+    if (typeof search === "string" && search.trim()) {
+      // Matched literally: the text is escaped so it can't be used as a regex
+      // (injection / catastrophic backtracking).
+      const rx = { $regex: search.trim().slice(0, 100).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" };
+      query.$or = [{ title: rx }, { originalAuthor: rx }, { description: rx }, { tags: rx }];
     }
 
     const skip = (Number(page) - 1) * Number(limit);
 
+    // "ranked" sort uses the weighted formula instead of a plain field sort.
+    if (sort === "ranked") {
+      const [{ books, total } = { books: [], total: 0 }] = await rankedBookQuery(query, skip, Number(limit));
+      return res.json({
+        success: true,
+        data: books,
+        pagination: { page: Number(page), limit: Number(limit), total, pages: Math.ceil(total / Number(limit)) },
+      });
+    }
+
     const [books, total] = await Promise.all([
       Book.find(query)
+        // Chapter/manuscript text never belongs in a list response — actual
+        // chapter content is only ever served through the dedicated,
+        // purchase-gated getChapterContent endpoint below. Without this,
+        // every paid book's full text was sitting in the browse/discover
+        // list response, readable before any purchase check ran.
+        .select("-content -chapters.content")
         .populate("author", "name profilePicture role blockchainWallet walletAddress")
         .sort(sort)
         .skip(skip)
@@ -51,6 +88,82 @@ const getBooks = async (req, res) => {
   }
 };
 
+// Runs the weighted-ranking aggregation and returns paginated, populated
+// results in one round trip (via $facet), plus the total match count.
+async function rankedBookQuery(matchQuery, skip, limit) {
+  const [maxReadsResult] = await Book.aggregate([
+    { $match: matchQuery },
+    { $group: { _id: null, maxReads: { $max: "$totalReads" } } },
+  ]);
+  const maxReads = maxReadsResult?.maxReads || 0;
+
+  const pipeline = [
+    { $match: matchQuery },
+    {
+      $addFields: {
+        // Unrated/unevaluated books get a neutral default rather than 0, so
+        // brand-new books aren't automatically buried beneath low performers.
+        _ratingScore: {
+          $cond: [{ $gt: ["$totalRatings", 0] }, { $multiply: [{ $divide: ["$averageRating", 5] }, 100] }, 50],
+        },
+        _qualityScore: { $ifNull: ["$qualityScore", 70] },
+        // Log-scaled against the highest read count in this result set, since
+        // raw view counts are typically power-law distributed (a few books
+        // dominate) — log compresses that so engagement isn't all-or-nothing.
+        _engagementScore: {
+          $cond: [
+            { $gt: [maxReads, 0] },
+            {
+              $multiply: [
+                { $divide: [{ $ln: { $add: [{ $ifNull: ["$totalReads", 0] }, 1] } }, Math.log(maxReads + 1)] },
+                100,
+              ],
+            },
+            0,
+          ],
+        },
+      },
+    },
+    {
+      $addFields: {
+        rankScore: {
+          $add: [
+            { $multiply: ["$_ratingScore", RANK_WEIGHTS.rating] },
+            { $multiply: ["$_qualityScore", RANK_WEIGHTS.quality] },
+            { $multiply: ["$_engagementScore", RANK_WEIGHTS.engagement] },
+          ],
+        },
+      },
+    },
+    { $sort: { rankScore: -1 } },
+    {
+      $facet: {
+        books: [
+          { $skip: skip },
+          { $limit: limit },
+          {
+            $lookup: {
+              from: "users",
+              localField: "author",
+              foreignField: "_id",
+              as: "author",
+              pipeline: [{ $project: { name: 1, profilePicture: 1, role: 1, blockchainWallet: 1, walletAddress: 1 } }],
+            },
+          },
+          { $unwind: { path: "$author", preserveNullAndEmptyArrays: true } },
+          // Same reasoning as the plain-sort getBooks query above: never
+          // ship full chapter/manuscript text in a list response.
+          { $project: { content: 0, "chapters.content": 0 } },
+        ],
+        totalCount: [{ $count: "count" }],
+      },
+    },
+  ];
+
+  const [result] = await Book.aggregate(pipeline);
+  return [{ books: result?.books || [], total: result?.totalCount?.[0]?.count || 0 }];
+}
+
 const getBookById = async (req, res) => {
   try {
     const book = await Book.findById(req.params.id)
@@ -66,7 +179,19 @@ const getBookById = async (req, res) => {
     // Increment reads count
     Book.findByIdAndUpdate(req.params.id, { $inc: { totalReads: 1 } }).exec();
 
-    res.json({ success: true, data: book });
+    // Chapter/manuscript text is only meant to reach readers through the
+    // purchase-gated getChapterContent endpoint — strip it here too,
+    // *except* for the book's own author, who still needs full chapter
+    // content in this response for the /edit-book/:id editing flow
+    // (ChapterManager pre-fills its edit form from this data).
+    const isOwner = req.user && book.author?._id?.toString() === req.user._id.toString();
+    const responseBook = book.toObject();
+    if (!isOwner) {
+      delete responseBook.content;
+      responseBook.chapters = (responseBook.chapters || []).map(({ content, ...rest }) => rest);
+    }
+
+    res.json({ success: true, data: responseBook });
   } catch (error) {
     res.status(500).json({ success: false, message: "Server error" });
   }
@@ -93,7 +218,7 @@ const createBook = async (req, res) => {
       });
     }
 
-    const book = await Book.create({
+    const book = new Book({
       title,
       description,
       genre,
@@ -105,7 +230,8 @@ const createBook = async (req, res) => {
       author: req.user._id,
       status: "draft",
     });
-
+    snapshotVersion(book, "Manuscript created");
+    await book.save();
     await book.populate("author", "name profilePicture blockchainWallet walletAddress");
 
     res.status(201).json({ success: true, data: book });
@@ -147,12 +273,20 @@ const updateBook = async (req, res) => {
       "status",
     ];
 
+    // The review-workflow statuses are set by the submit/publisher routes only.
+    if (req.body.status !== undefined && req.body.status !== book.status && !["draft", "published", "archived"].includes(req.body.status)) {
+      return res.status(400).json({ success: false, message: "That status is set automatically by the review process." });
+    }
+
     allowedFields.forEach((field) => {
       if (req.body[field] !== undefined) {
         book[field] = req.body[field];
       }
     });
 
+    if (req.body.title !== undefined || req.body.description !== undefined) {
+      snapshotVersion(book, "Edited");
+    }
     await book.save();
     await book.populate("author", "name profilePicture blockchainWallet walletAddress");
 
@@ -207,6 +341,7 @@ const publishBook = async (req, res) => {
     }
 
     book.status = "published";
+    snapshotVersion(book, "Published");
     await book.save();
 
     res.json({
@@ -224,7 +359,7 @@ const rateBook = async (req, res) => {
   try {
     const { rating, review } = req.body;
 
-    if (!rating || rating < 1 || rating > 5) {
+    if (!Number.isFinite(Number(rating)) || rating < 1 || rating > 5) {
       return res
         .status(400)
         .json({ success: false, message: "Rating must be between 1 and 5" });
@@ -238,6 +373,20 @@ const rateBook = async (req, res) => {
         .json({ success: false, message: "Book not found" });
     }
 
+    if (book.status !== "published") {
+      return res.status(404).json({ success: false, message: "Book not found" });
+    }
+    if (book.author.toString() === req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: "You cannot rate your own book." });
+    }
+    // Paid books can only be rated by people who bought them.
+    if (book.isPaid && (book.price || 0) > 0) {
+      const owns = (req.user.purchasedBooks || []).some((id) => id.toString() === book._id.toString());
+      if (!owns) {
+        return res.status(403).json({ success: false, message: "Buy this book to rate it." });
+      }
+    }
+
     // if user already rated
     const existingRating = book.ratings.find(
       (r) => r.user.toString() === req.user._id.toString(),
@@ -245,9 +394,9 @@ const rateBook = async (req, res) => {
 
     if (existingRating) {
       existingRating.rating = rating;
-      existingRating.review = review || existingRating.review;
+      existingRating.review = typeof review === "string" ? review.slice(0, 1000) : existingRating.review;
     } else {
-      book.ratings.push({ user: req.user._id, rating, review });
+      book.ratings.push({ user: req.user._id, rating: Number(rating), review: typeof review === "string" ? review.slice(0, 1000) : undefined });
     }
 
     await book.save();
@@ -278,7 +427,10 @@ const getMyBooks = async (req, res) => {
   }
 };
 
-// Get all chapters of a book
+// Get all chapters of a book — titles/order only (a table-of-contents
+// preview). This stays public even for paid books; the actual chapter
+// TEXT is only ever served through the purchase-gated getChapterContent
+// endpoint below.
 const getBookChapters = async (req, res) => {
   try {
     const book = await Book.findById(req.params.id)
@@ -291,8 +443,9 @@ const getBookChapters = async (req, res) => {
         .json({ success: false, message: "Book not found" });
     }
 
-    // Sort chapters by order
-    const chapters = book.chapters.sort((a, b) => a.order - b.order);
+    const chapters = book.chapters
+      .sort((a, b) => a.order - b.order)
+      .map((c) => ({ _id: c._id, title: c.title, order: c.order }));
 
     res.json({
       success: true,
@@ -315,7 +468,7 @@ const getChapterContent = async (req, res) => {
     const { id, chapterId } = req.params;
 
     const book = await Book.findById(id)
-      .select("title author chapters")
+      .select("title author chapters isPaid price status publisher")
       .populate("author", "name");
 
     if (!book) {
@@ -324,12 +477,46 @@ const getChapterContent = async (req, res) => {
         .json({ success: false, message: "Book not found" });
     }
 
+    // A manuscript that isn't published yet is private: only its author and
+    // the publisher the author sent it to may read it.
+    if (book.status !== "published") {
+      const uid = req.user?._id?.toString();
+      const isAuthor = uid && book.author?._id?.toString() === uid;
+      const isAssignedPublisher = uid && book.publisher?.toString() === uid;
+      if (!isAuthor && !isAssignedPublisher) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Book not found" });
+      }
+    }
+
     const chapter = book.chapters.id(chapterId);
 
     if (!chapter) {
       return res
         .status(404)
         .json({ success: false, message: "Chapter not found" });
+    }
+
+    // Paid books require the reader to have purchased it (or be its
+    // author) before the actual chapter text is returned — this is the
+    // one and only place chapter content is served, so gating here is
+    // what actually enforces "pay to read" rather than just the UI.
+    if (book.isPaid) {
+      const isAuthor = req.user && book.author?._id?.toString() === req.user._id.toString();
+      const hasPurchased =
+        !isAuthor &&
+        req.user &&
+        (req.user.purchasedBooks || []).some((pid) => pid.toString() === book._id.toString());
+
+      if (!isAuthor && !hasPurchased) {
+        return res.status(403).json({
+          success: false,
+          message: "Purchase this book to read its chapters.",
+          requiresPurchase: true,
+          price: book.price,
+        });
+      }
     }
 
     res.json({
@@ -387,11 +574,13 @@ const addChapter = async (req, res) => {
       order: newOrder,
     });
 
+    snapshotVersion(book, "Chapter added");
     await book.save();
 
     res.status(201).json({
       success: true,
       data: book.chapters[book.chapters.length - 1],
+      versionHistory: book.versionHistory,
       message: "Chapter added successfully",
     });
   } catch (error) {
@@ -432,11 +621,13 @@ const updateChapter = async (req, res) => {
     if (content) chapter.content = content;
     if (order) chapter.order = order;
 
+    snapshotVersion(book, "Chapter edited");
     await book.save();
 
     res.json({
       success: true,
       data: chapter,
+      versionHistory: book.versionHistory,
       message: "Chapter updated successfully",
     });
   } catch (error) {
@@ -470,10 +661,12 @@ const deleteChapter = async (req, res) => {
       chapter.order = index + 1;
     });
 
+    snapshotVersion(book, "Chapter deleted");
     await book.save();
 
     res.json({
       success: true,
+      versionHistory: book.versionHistory,
       message: "Chapter deleted successfully",
     });
   } catch (error) {

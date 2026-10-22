@@ -8,7 +8,7 @@ const VerificationBanner = () => (
     <div>
       <span className="verification-title">Verified Publisher</span>
       <span className="verification-sub">
-        Blockchain-verified identity since Jan 2026
+        Business details checked by a BookConnect admin
       </span>
     </div>
     <CheckCircle size={20} className="verification-check" />

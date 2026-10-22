@@ -7,19 +7,17 @@ const Footer = () => {
   return (
     <footer className="footer">
       <div className="footer-content">
-        {/* Brand Section */}
-        <div className="footer-section brand-section">
-          <Link to="/" className="footer-logo">
-            <BookOpen size={24} color="#a78bfa" />
-            <span>BookConnect</span>
-          </Link>
+        <div className="footer-section">
+          <h3 style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <BookOpen />
+            BookConnect
+          </h3>
           <p>
             Blockchain-enabled AI-powered digital publishing platform for secure
             and intelligent knowledge exchange.
           </p>
         </div>
 
-        {/* Quick Links */}
         <div className="footer-section">
           <h3>Quick Links</h3>
           <ul>
@@ -27,82 +25,64 @@ const Footer = () => {
               <Link to="/">Home</Link>
             </li>
             <li>
-              <Link to="/books">Browse Books</Link>
+              <Link to="/books">Books</Link>
+            </li>
+            <li>
+              <Link to="/authors">Authors</Link>
             </li>
             <li>
               <Link to="/about">About Us</Link>
             </li>
-            <li>
-              <Link to="/register">Get Started</Link>
-            </li>
           </ul>
         </div>
 
-        {/* For Authors */}
         <div className="footer-section">
           <h3>For Authors</h3>
           <ul>
             <li>
-              <Link to="/dashboard">Publish Your Book</Link>
+              <Link to="/publish">Publish Your Book</Link>
             </li>
             <li>
-              <Link to="/about">AI Writing Assistant</Link>
+              <Link to="/collaborate">Collaborative Writing</Link>
             </li>
             <li>
-              <Link to="/about">Blockchain Verification</Link>
+              <Link to="/blockchain">Blockchain Verification</Link>
             </li>
             <li>
-              <Link to="/dashboard">Author Royalties</Link>
+              <Link to="/royalties">Royalties</Link>
             </li>
           </ul>
         </div>
 
-        {/* Connect With Us */}
         <div className="footer-section">
           <h3>Connect With Us</h3>
-          <div className="social-links">
-            <a
-              href="https://github.com"
-              target="_blank"
-              rel="noreferrer"
-              className="social-btn"
-              aria-label="GitHub"
-            >
-              <Github size={18} />
-            </a>
-            <a
-              href="https://twitter.com"
-              target="_blank"
-              rel="noreferrer"
-              className="social-btn"
-              aria-label="Twitter"
-            >
-              <Twitter size={18} />
-            </a>
-            <a
-              href="https://linkedin.com"
-              target="_blank"
-              rel="noreferrer"
-              className="social-btn"
-              aria-label="LinkedIn"
-            >
-              <Linkedin size={18} />
-            </a>
-            <a
-              href="mailto:hello@bookconnect.com"
-              className="social-btn"
-              aria-label="Email"
-            >
-              <Mail size={18} />
-            </a>
-          </div>
+          <ul>
+            <li>
+              <a href="#">
+                <Github style={{ marginRight: "8px" }} /> GitHub
+              </a>
+            </li>
+            <li>
+              <a href="#">
+                <Twitter style={{ marginRight: "8px" }} /> Twitter
+              </a>
+            </li>
+            <li>
+              <a href="#">
+                <Linkedin style={{ marginRight: "8px" }} /> LinkedIn
+              </a>
+            </li>
+            <li>
+              <a href="#">
+                <Mail style={{ marginRight: "8px" }} /> Email
+              </a>
+            </li>
+          </ul>
         </div>
       </div>
 
       <div className="footer-bottom">
-        <p>
-          &copy; {new Date().getFullYear()} BookConnect. All rights reserved.
-        </p>
+        <p>&copy; 2026 BookConnect. All rights reserved.</p>
       </div>
     </footer>
   );

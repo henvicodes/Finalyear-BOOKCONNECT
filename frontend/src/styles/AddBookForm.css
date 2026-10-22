@@ -18,7 +18,7 @@
   background: rgba(220, 38, 38, 0.1);
   border: 1px solid rgba(220, 38, 38, 0.3);
   border-radius: 8px;
-  color: #dc2626;
+  color: var(--danger);
   margin-bottom: 1.5rem;
 }
 
@@ -106,7 +106,7 @@
 }
 
 .tag-remove:hover {
-  color: #dc2626;
+  color: var(--danger);
 }
 
 .form-actions {

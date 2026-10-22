@@ -26,37 +26,60 @@ const RegisterPage = () => {
   const [showOTP, setShowOTP] = useState(false);
   const [registrationEmail, setRegistrationEmail] = useState("");
 
-  const { register, login } = useAuth();
+  const { login } = useAuth();
   const navigate = useNavigate();
 
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-    if (errors[e.target.name]) setErrors({ ...errors, [e.target.name]: "" });
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value,
+    });
+    if (errors[e.target.name]) {
+      setErrors({
+        ...errors,
+        [e.target.name]: "",
+      });
+    }
   };
 
   const validateForm = () => {
     const newErrors = {};
-    if (!formData.name) newErrors.name = "Name is required";
-    else if (formData.name.length < 2)
+    if (!formData.name) {
+      newErrors.name = "Name is required";
+    } else if (formData.name.length < 2) {
       newErrors.name = "Name must be at least 2 characters";
-    if (!formData.email) newErrors.email = "Email is required";
-    else if (!/\S+@\S+\.\S+/.test(formData.email))
+    }
+
+    if (!formData.email) {
+      newErrors.email = "Email is required";
+    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
       newErrors.email = "Email is invalid";
-    if (!formData.password) newErrors.password = "Password is required";
-    else if (formData.password.length < 6)
+    }
+
+    if (!formData.password) {
+      newErrors.password = "Password is required";
+    } else if (formData.password.length < 6) {
       newErrors.password = "Password must be at least 6 characters";
-    if (formData.password !== formData.confirmPassword)
+    }
+
+    if (formData.password !== formData.confirmPassword) {
       newErrors.confirmPassword = "Passwords do not match";
+    }
+
     return newErrors;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     const newErrors = validateForm();
-    if (Object.keys(newErrors).length > 0) return setErrors(newErrors);
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      return;
+    }
 
     setIsLoading(true);
     try {
+      // Send OTP to email
       const response = await api.post("/api/auth/send-otp", {
         name: formData.name,
         email: formData.email,
@@ -92,8 +115,7 @@ const RegisterPage = () => {
         otp,
       });
       if (response.data.success) {
-        const { token, ...userInfo } = response.data.data;
-        localStorage.setItem("user", JSON.stringify({ ...userInfo, token }));
+        // The server set the session cookie; login() below stores the profile.
         await login(registrationEmail, formData.password);
         navigate("/dashboard");
       }
@@ -104,35 +126,27 @@ const RegisterPage = () => {
 
   const handleResendOTP = async () => {
     try {
-      await api.post("/api/auth/resend-otp", { email: registrationEmail });
+      await api.post("/api/auth/resend-otp", {
+        email: registrationEmail,
+      });
     } catch (error) {
       throw new Error(error.response?.data?.message || "Failed to resend OTP");
     }
+  };
+
+  const handleCancelOTP = () => {
+    setShowOTP(false);
+    setRegistrationEmail("");
   };
 
   return (
     <>
       <div className="register-container">
         <div className="register-card">
-          {/* Unified Logo */}
           <div className="logo-wrapper">
-            <Link
-              to="/"
-              className="sidebar-logo"
-              style={{ textDecoration: "none" }}
-            >
-              <BookOpen size={28} color="#7c3aed" />
-              <span
-                style={{
-                  fontSize: 24,
-                  fontWeight: 800,
-                  color: "#7c3aed",
-                  letterSpacing: "-0.5px",
-                }}
-              >
-                BookConnect
-              </span>
-            </Link>
+            <div className="logo-icon">
+              <BookOpen />
+            </div>
           </div>
 
           <h2 className="register-title">Create your account</h2>
@@ -156,6 +170,7 @@ const RegisterPage = () => {
                   id="name"
                   name="name"
                   type="text"
+                  autoComplete="name"
                   required
                   value={formData.name}
                   onChange={handleChange}
@@ -174,6 +189,7 @@ const RegisterPage = () => {
                   id="email"
                   name="email"
                   type="email"
+                  autoComplete="email"
                   required
                   value={formData.email}
                   onChange={handleChange}
@@ -215,6 +231,7 @@ const RegisterPage = () => {
                   id="password"
                   name="password"
                   type="password"
+                  autoComplete="new-password"
                   required
                   value={formData.password}
                   onChange={handleChange}
@@ -235,6 +252,7 @@ const RegisterPage = () => {
                   id="confirmPassword"
                   name="confirmPassword"
                   type="password"
+                  autoComplete="new-password"
                   required
                   value={formData.confirmPassword}
                   onChange={handleChange}
@@ -276,7 +294,7 @@ const RegisterPage = () => {
           email={registrationEmail}
           onVerify={handleVerifyOTP}
           onResend={handleResendOTP}
-          onCancel={() => setShowOTP(false)}
+          onCancel={handleCancelOTP}
         />
       )}
     </>

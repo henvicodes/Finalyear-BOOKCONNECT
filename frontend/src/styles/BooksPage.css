@@ -76,6 +76,35 @@
   margin-top: 1rem;
 }
 
+.sort-control {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.625rem;
+  margin-top: 1.25rem;
+}
+
+.sort-control label {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  font-weight: var(--font-medium);
+}
+
+.sort-control select {
+  padding: 0.4rem 0.75rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-medium);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.sort-control select:focus {
+  outline: none;
+  border-color: var(--accent-500);
+  box-shadow: var(--shadow-focus);
+}
+
 .genre-filter-btn {
   padding: 0.45rem 1rem;
   background: var(--bg-secondary);
@@ -202,8 +231,8 @@
 }
 
 .book-card-rating .star-filled {
-  fill: #fbbf24;
-  color: #fbbf24;
+  fill: var(--warning);
+  color: var(--warning);
 }
 
 .book-card-no-rating {
@@ -248,7 +277,7 @@
 .books-error {
   text-align: center;
   padding: 4rem 2rem;
-  color: #dc2626;
+  color: var(--danger);
 }
 
 .retry-btn {

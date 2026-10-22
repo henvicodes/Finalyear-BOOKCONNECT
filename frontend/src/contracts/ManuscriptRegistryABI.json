@@ -1,0 +1,88 @@
+[
+  {
+    "anonymous": false,
+    "inputs": [
+      { "indexed": true, "internalType": "bytes32", "name": "manuscriptId", "type": "bytes32" },
+      { "indexed": true, "internalType": "address", "name": "author", "type": "address" },
+      { "indexed": false, "internalType": "bytes32", "name": "contentHash", "type": "bytes32" },
+      { "indexed": false, "internalType": "uint256", "name": "timestamp", "type": "uint256" }
+    ],
+    "name": "ManuscriptRegistered",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      { "indexed": true, "internalType": "bytes32", "name": "manuscriptId", "type": "bytes32" },
+      { "indexed": false, "internalType": "bytes32", "name": "contentHash", "type": "bytes32" },
+      { "indexed": false, "internalType": "uint256", "name": "timestamp", "type": "uint256" }
+    ],
+    "name": "ManuscriptUpdated",
+    "type": "event"
+  },
+  {
+    "inputs": [{ "internalType": "bytes32", "name": "manuscriptId", "type": "bytes32" }],
+    "name": "getHistory",
+    "outputs": [
+      {
+        "components": [
+          { "internalType": "bytes32", "name": "contentHash", "type": "bytes32" },
+          { "internalType": "uint256", "name": "timestamp", "type": "uint256" }
+        ],
+        "internalType": "struct ManuscriptRegistry.Version[]",
+        "name": "",
+        "type": "tuple[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [{ "internalType": "bytes32", "name": "manuscriptId", "type": "bytes32" }],
+    "name": "getVersionCount",
+    "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "bytes32", "name": "manuscriptId", "type": "bytes32" },
+      { "internalType": "bytes32", "name": "contentHash", "type": "bytes32" }
+    ],
+    "name": "registerManuscript",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [{ "internalType": "bytes32", "name": "", "type": "bytes32" }],
+    "name": "registrations",
+    "outputs": [
+      { "internalType": "address", "name": "author", "type": "address" },
+      { "internalType": "uint256", "name": "registeredAt", "type": "uint256" },
+      { "internalType": "bool", "name": "exists", "type": "bool" }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "bytes32", "name": "manuscriptId", "type": "bytes32" },
+      { "internalType": "bytes32", "name": "contentHash", "type": "bytes32" }
+    ],
+    "name": "updateManuscript",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "bytes32", "name": "manuscriptId", "type": "bytes32" },
+      { "internalType": "bytes32", "name": "contentHash", "type": "bytes32" }
+    ],
+    "name": "verifyManuscript",
+    "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }],
+    "stateMutability": "view",
+    "type": "function"
+  }
+]

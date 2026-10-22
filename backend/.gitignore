@@ -1,2 +1,4 @@
 node_modules
 .env
+# downloaded source texts (re-create with: node scripts/downloadLibrary.js)
+data/gutenberg/

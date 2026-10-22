@@ -1,0 +1,231 @@
+/* Floating assistant shown on every dashboard. Uses the app's theme tokens, so it
+   follows light/dark mode. */
+.aiw-fab {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: linear-gradient(135deg, var(--accent-600), var(--accent-700, var(--accent-600)));
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  z-index: 900;
+  transition: transform 0.15s ease;
+}
+.aiw-fab:hover {
+  transform: scale(1.06);
+}
+.aiw-panel {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  width: 372px;
+  max-width: calc(100vw - 24px);
+  height: 540px;
+  max-height: calc(100vh - 44px);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border: 1px solid color-mix(in srgb, var(--text-primary) 12%, transparent);
+  border-radius: 16px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+  z-index: 900;
+  overflow: hidden;
+  font-family: var(--font-sans, system-ui, sans-serif);
+}
+.aiw-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+  background: color-mix(in srgb, var(--accent-600) 8%, transparent);
+}
+.aiw-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: #ec4899;
+  flex-shrink: 0;
+}
+.aiw-title {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+  flex: 1;
+  min-width: 0;
+}
+.aiw-title strong {
+  font-size: 14px;
+}
+.aiw-title span {
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-transform: capitalize;
+}
+.aiw-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  padding: 4px;
+  border-radius: 6px;
+}
+.aiw-close:hover {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+.aiw-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.aiw-note,
+.aiw-error {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0;
+}
+.aiw-error {
+  color: var(--danger);
+}
+.aiw-welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 13px;
+  padding: 14px 8px;
+}
+.aiw-welcome p {
+  margin: 0;
+}
+.aiw-row {
+  display: flex;
+}
+.aiw-row.mine {
+  justify-content: flex-end;
+}
+.aiw-row.bot {
+  justify-content: flex-start;
+}
+.aiw-bubble {
+  max-width: 85%;
+  padding: 9px 12px;
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+/* you: accent colour, on the right. The assistant: neutral, on the left. */
+.aiw-bubble.mine {
+  background: var(--accent-600);
+  color: #fff;
+  border-radius: 14px 14px 3px 14px;
+}
+.aiw-bubble.bot {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  color: var(--text-primary);
+  border-radius: 14px 14px 14px 3px;
+}
+.aiw-typing {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+.aiw-typing i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  animation: aiw-blink 1.1s infinite ease-in-out;
+}
+.aiw-typing i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.aiw-typing i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes aiw-blink {
+  0%,
+  80%,
+  100% {
+    opacity: 0.25;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+.aiw-starters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 14px 10px;
+}
+.aiw-starters button {
+  font-size: 12px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  border: 1px solid color-mix(in srgb, var(--accent-600) 35%, transparent);
+  background: transparent;
+  color: var(--accent-600);
+  text-align: left;
+}
+.aiw-starters button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent-600) 10%, transparent);
+}
+.aiw-form {
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+.aiw-form input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  border: 1px solid color-mix(in srgb, var(--text-primary) 14%, transparent);
+  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  color: var(--text-primary);
+}
+.aiw-form input:focus {
+  outline: 2px solid color-mix(in srgb, var(--accent-600) 50%, transparent);
+}
+.aiw-form button {
+  width: 38px;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  color: #fff;
+  background: var(--accent-600);
+  display: grid;
+  place-items: center;
+}
+.aiw-form button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+@media (max-width: 520px) {
+  .aiw-panel {
+    right: 8px;
+    bottom: 8px;
+    height: calc(100vh - 16px);
+    max-height: none;
+  }
+}
