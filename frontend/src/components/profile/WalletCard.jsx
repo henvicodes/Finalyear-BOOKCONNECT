@@ -105,6 +105,19 @@ const WalletCard = ({ user }) => {
     }
   };
 
+  // Disconnect the linked wallet from this account (e.g. it was linked by mistake)
+  const handleUnlink = async () => {
+    if (!window.confirm("Unlink this MetaMask wallet from your BookConnect account? Your balance and payments are not affected.")) return;
+    try {
+      await axios.delete(`${BASE_URL}/api/auth/link-wallet`);
+      setIsLinked(false);
+      setWalletAddress("");
+      updateUserFields({ blockchainWallet: { address: "", isLinked: false }, walletAddress: "" });
+    } catch (err) {
+      setConnectError(err.response?.data?.message || "Could not unlink the wallet. Please try again.");
+    }
+  };
+
   const handleRevealBalanceClick = () => {
     if (showBalance) {
       setShowBalance(false);
@@ -299,6 +312,13 @@ const WalletCard = ({ user }) => {
             <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--success)", fontSize: 12, fontWeight: "bold" }}>
               <CheckCircle size={18} />
               <span>Verified</span>
+              <button
+                onClick={handleUnlink}
+                title="Disconnect this wallet from your account"
+                style={{ marginLeft: 6, padding: "3px 8px", fontSize: 11, borderRadius: 8, cursor: "pointer", background: "transparent", color: "var(--text-secondary)", border: "1px solid var(--accent-100)" }}
+              >
+                Unlink
+              </button>
             </div>
           ) : (
             <button

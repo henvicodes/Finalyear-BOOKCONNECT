@@ -19,6 +19,11 @@ export async function payOnChainIfLinked({ payer, receiver, amountUsd, purpose }
   if (!PAYMENT_LEDGER_ADDRESS || !(amountUsd > 0) || !isAddress(from) || !isAddress(to)) {
     return { txHash: "", onChain: false };
   }
+  // Same wallet on both sides (one MetaMask account linked to two accounts): the
+  // contract rejects paying yourself, so skip the chain and keep it in-app.
+  if (from.toLowerCase() === to.toLowerCase()) {
+    return { txHash: "", onChain: false, reason: "same-wallet" };
+  }
   const { txHash } = await makePaymentOnChain(to, (amountUsd * USD_TO_ETH).toFixed(5), purpose);
   return { txHash, onChain: true };
 }

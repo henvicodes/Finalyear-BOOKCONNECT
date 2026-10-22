@@ -368,6 +368,28 @@ describe("Ownership checks", () => {
     }
   });
 
+  it("lets one MetaMask account belong to only one BookConnect account, and can be unlinked", async () => {
+    const wallet = "0x0eafd2c3aBcD1234567890abcdef1234567397E9";
+    const first = await request(app).post("/api/auth/link-wallet").set(auth(authorToken)).send({ walletAddress: wallet });
+    expect(first.status).toBe(200);
+
+    // same address, different capitalisation, on another account: refused
+    const second = await request(app).post("/api/auth/link-wallet").set(auth(readerToken)).send({ walletAddress: wallet.toLowerCase().replace("0x", "0x") });
+    expect(second.status).toBe(409);
+    expect(second.body.message).toMatch(/already linked/i);
+
+    // relinking your own wallet is fine
+    const again = await request(app).post("/api/auth/link-wallet").set(auth(authorToken)).send({ walletAddress: wallet });
+    expect(again.status).toBe(200);
+
+    // after the first account unlinks it, the other can use it
+    const unlink = await request(app).delete("/api/auth/link-wallet").set(auth(authorToken));
+    expect(unlink.status).toBe(200);
+    expect((await User.findOne({ email: "own-author@example.com" })).blockchainWallet.isLinked).toBe(false);
+    const third = await request(app).post("/api/auth/link-wallet").set(auth(readerToken)).send({ walletAddress: wallet });
+    expect(third.status).toBe(200);
+  });
+
   it("rejects a malformed wallet address", async () => {
     const res = await request(app).post("/api/auth/link-wallet").set(auth(readerToken)).send({ walletAddress: "not-an-address" });
     expect(res.status).toBe(400);

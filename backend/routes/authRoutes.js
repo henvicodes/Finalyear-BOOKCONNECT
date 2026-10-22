@@ -9,6 +9,7 @@ const {
   getUserProfile,
   updateUserProfile,
   linkWallet,
+  unlinkWallet,
   searchUsers,
 } = require("../controllers/authController");
 const { uploadProfilePicture } = require("../controllers/UploadController.js");
@@ -31,6 +32,7 @@ router.get("/profile", protect, getUserProfile);
 router.put("/profile", protect, updateUserProfile);
 router.put("/profile/picture", protect, uploadProfilePicture); // ← new
 router.post("/link-wallet", protect, linkWallet);
+router.delete("/link-wallet", protect, unlinkWallet);
 router.get("/search", protect, searchUsers);
 
 module.exports = router;

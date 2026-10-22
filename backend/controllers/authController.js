@@ -411,6 +411,23 @@ const linkWallet = async (req, res) => {
       return res.status(400).json({ success: false, message: "A valid wallet address is required" });
     }
 
+    // One MetaMask account can belong to only one BookConnect account. Two accounts
+    // sharing a wallet would make a buyer and seller the same address on-chain, and
+    // the payment contract refuses to let a wallet pay itself.
+    const taken = await User.findOne({
+      _id: { $ne: req.user._id },
+      $or: [
+        { walletAddress: { $regex: `^${walletAddress}$`, $options: "i" } },
+        { "blockchainWallet.address": { $regex: `^${walletAddress}$`, $options: "i" } },
+      ],
+    }).select("_id");
+    if (taken) {
+      return res.status(409).json({
+        success: false,
+        message: "That MetaMask account is already linked to another BookConnect account. Switch to a different MetaMask account and try again.",
+      });
+    }
+
     const user = await User.findById(req.user._id);
 
     if (user) {
@@ -444,6 +461,20 @@ const linkWallet = async (req, res) => {
     });
   }
 };
+// DELETE /api/auth/link-wallet - disconnect the linked wallet from this account
+const unlinkWallet = async (req, res) => {
+  try {
+    await User.updateOne(
+      { _id: req.user._id },
+      { $set: { walletAddress: "", blockchainWallet: { isLinked: false } } }
+    );
+    res.json({ success: true, message: "Wallet unlinked" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
 const searchUsers = async (req, res) => {
   try {
     const { q } = req.query;
@@ -472,5 +503,6 @@ module.exports = {
   getUserProfile,
   updateUserProfile,
   linkWallet,
+  unlinkWallet,
   searchUsers,
 };
