@@ -257,7 +257,7 @@ const PublisherDashboard = ({ user, token, onLogout }) => {
             <BarChart2 size={18} /><span>Overview</span>
           </button>
           <button className={`sidebar-link ${activeTab === "verification" ? "active" : ""}`} onClick={() => setActiveTab("verification")}>
-            <Shield size={18} /><span>Web3 Trust Proof</span>
+            <Shield size={18} /><span>Verification</span>
           </button>
           <button className={`sidebar-link ${activeTab === "submissions" ? "active" : ""}`} onClick={() => setActiveTab("submissions")}>
             <FileText size={18} /><span>Submissions {reviewCount > 0 && <span style={{ background: "var(--warning)", color: "#fff", padding: "1px 6px", borderRadius: 10, fontSize: 10 }}>{reviewCount}</span>}</span>
@@ -324,11 +324,11 @@ const PublisherDashboard = ({ user, token, onLogout }) => {
         <header className="dash-topbar" style={{ justifyContent: "flex-end" }}>
           {isVerified ? (
             <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--success)", fontSize: 13, fontWeight: "bold" }}>
-              <Shield size={16} /> Trust Verified Publisher
+              <Shield size={16} /> Verified Publisher
             </div>
           ) : (
             <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--warning)", fontSize: 13, fontWeight: "bold" }}>
-              <AlertCircle size={16} /> Web3 Credibility Link Pending
+              <AlertCircle size={16} /> {verification?.status === "pending" ? "Verification under review" : "Not verified yet"}
             </div>
           )}
         </header>
@@ -350,7 +350,7 @@ const PublisherDashboard = ({ user, token, onLogout }) => {
                 <StatCard icon={<BookOpen size={20} />} label="Published Books" value={publishedBooks.length} color="var(--info)" />
                 <StatCard icon={<Clock size={20} />} label="Pending Review" value={reviewCount} color="var(--warning)" />
                 <StatCard icon={<DollarSign size={20} />} label="Earned Revenue" value={`$${(user?.earnings || 0).toFixed(2)}`} color="var(--success)" />
-                <StatCard icon={<Shield size={20} />} label="Credibility Status" value={isVerified ? "Verified" : "Unverified"} color={isVerified ? "var(--success)" : "var(--warning)"} />
+                <StatCard icon={<Shield size={20} />} label="Verification" value={isVerified ? "Verified" : "Unverified"} color={isVerified ? "var(--success)" : "var(--warning)"} />
               </div>
 
               <div className="dash-grid">

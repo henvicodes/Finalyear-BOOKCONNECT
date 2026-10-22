@@ -1197,7 +1197,7 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
                 </form>
 
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  {["", "fiction", "non-fiction", "science", "technology", "poetry", "mystery", "romance"].map(g => (
+                  {["", "fiction", "non-fiction", "science", "technology", "poetry", "drama", "history", "biography", "mystery", "romance", "thriller", "fantasy", "horror", "children"].map(g => (
                     <button
                       key={g}
                       onClick={() => handleGenreChange(g)}

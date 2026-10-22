@@ -31,7 +31,9 @@ function body(raw) {
   const start = text.match(START_RE);
   const from = start ? start.index + start[0].length : 0;
   const end = text.search(END_RE);
-  return text.slice(from, end > from ? end : undefined).trim();
+  // Gutenberg marks italics as _word_; show plain text instead of stray underscores
+  const plain = (t) => t.replace(/_([^_\n]{1,200}?)_/g, "$1");
+  return plain(text.slice(from, end > from ? end : undefined)).trim();
 }
 
 // "CHAPTER I. Down the Rabbit-Hole" and "Chapter I" are the same heading

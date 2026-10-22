@@ -43,7 +43,7 @@ const TITLES = ["The Last Monsoon", "Paper Lanterns", "Code of the Rivers", "Mid
   const oid = () => new mongoose.Types.ObjectId();
 
   const user = (name, role, createdAt, extra = {}) => ({
-    _id: oid(), name, email: `${name.toLowerCase().replace(/[^a-z]/g, ".")}.${between(100, 999)}@example.com`, password: hash,
+    _id: oid(), name, email: `${name.toLowerCase().replace(/[^a-z]+/g, ".")}.${between(100, 999)}@example.com`, password: hash,
     role, isEmailVerified: true, isVerified: false, walletBalance: 1000, earnings: 0, purchasedBooks: [], interests: [],
     pinFailedAttempts: 0, createdAt, updatedAt: createdAt, ...extra,
   });
