@@ -208,6 +208,24 @@ describe("Money moves are atomic and validated", () => {
     expect(self.status).toBe(400);
   });
 
+  it("older accounts with no stored balance can still pay and be paid (they start at the default 1000)", async () => {
+    const buyerToken = await createVerifiedUser({ name: "Old Buyer", email: "old-buyer@example.com", password: pwd, role: "reader" });
+    await createVerifiedUser({ name: "Old Seller", email: "old-seller@example.com", password: pwd, role: "author" });
+    await setWalletPin(buyerToken, "1234");
+    // simulate accounts created before the wallet field existed
+    await User.collection.updateMany({ email: { $in: ["old-buyer@example.com", "old-seller@example.com"] } }, { $unset: { walletBalance: "" } });
+    const seller = await User.findOne({ email: "old-seller@example.com" });
+    const book = await Book.create({ title: "Old Accounts Book", description: "d", genre: "fiction", author: seller._id, status: "published", isPaid: true, price: 299 });
+
+    const res = await request(app).post(`/api/reader/${book._id}/purchase`).set(auth(buyerToken)).send({ pin: "1234" });
+    expect(res.status).toBe(200);
+    expect(res.body.walletBalance).toBe(701); // 1000 - 299
+
+    const sellerAfter = await User.findById(seller._id);
+    expect(sellerAfter.walletBalance).toBe(1299); // 1000 default + 299, not just 299
+    expect(sellerAfter.earnings).toBe(299);
+  });
+
   it("requires the PIN for every transfer", async () => {
     const res = await request(app).post("/api/blockchain/transfer").set(auth(bobToken))
       .send({ receiverId: aliceId, amount: 1 });

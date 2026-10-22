@@ -11,6 +11,13 @@ const chainVerifier = require("../services/chainVerifier");
 
 const round = (n) => Math.round(n * 100) / 100;
 
+// New accounts start with this balance (see the User model). Older accounts created
+// before the field existed have NO stored balance at all, and the raw atomic updates
+// below don't apply the model's default - so a missing balance is filled in first.
+const STARTING_BALANCE = 1000;
+const ensureBalance = (userId) =>
+  User.updateOne({ _id: userId, walletBalance: { $exists: false } }, { $set: { walletBalance: STARTING_BALANCE } });
+
 // Validates a money amount from a request. Returns a number, or null if invalid.
 function parseAmount(raw, { max = 1_000_000 } = {}) {
   const n = typeof raw === "string" ? Number(raw) : raw;
@@ -20,7 +27,8 @@ function parseAmount(raw, { max = 1_000_000 } = {}) {
 
 // Takes `amount` from the user only if they can afford it right now.
 // extraFilter / extraUpdate let a caller make another change in the same atomic step.
-function debit(userId, amount, extraFilter = {}, extraUpdate = {}) {
+async function debit(userId, amount, extraFilter = {}, extraUpdate = {}) {
+  await ensureBalance(userId);
   return User.findOneAndUpdate(
     { _id: userId, walletBalance: { $gte: amount }, ...extraFilter },
     { $inc: { walletBalance: -amount }, ...extraUpdate },
@@ -28,7 +36,8 @@ function debit(userId, amount, extraFilter = {}, extraUpdate = {}) {
   );
 }
 
-function credit(userId, amount, { earned = true } = {}) {
+async function credit(userId, amount, { earned = true } = {}) {
+  await ensureBalance(userId); // otherwise the credit would become the whole balance
   const inc = { walletBalance: amount };
   if (earned) inc.earnings = amount;
   return User.findByIdAndUpdate(userId, { $inc: inc }, { new: true });
@@ -37,6 +46,7 @@ function credit(userId, amount, { earned = true } = {}) {
 // Gives money back after a failed later step (best effort, but logged loudly).
 async function refund(userId, amount, undoUpdate = {}) {
   try {
+    await ensureBalance(userId);
     await User.updateOne({ _id: userId }, { $inc: { walletBalance: amount }, ...undoUpdate });
   } catch (err) {
     console.error(`CRITICAL: refund of ${amount} to ${userId} failed`, err);
