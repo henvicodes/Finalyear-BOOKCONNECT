@@ -172,7 +172,7 @@ const WalletCard = ({ user }) => {
           // PaymentLedger contract (both happen in one transaction, or
           // neither does).
           try {
-            const result = await makePaymentOnChain(recipientAddr, ethVal, "p2p_transfer");
+            const result = await makePaymentOnChain(recipientAddr, ethVal, "p2p_transfer", walletAddress);
             txHash = result.txHash;
             onChain = true;
           } catch (chainErr) {
@@ -199,9 +199,10 @@ const WalletCard = ({ user }) => {
 
         if (data.success) {
           alert(
-            onChain
+            (onChain
               ? `Successfully sent $${transferData.amount} and ${ethVal} ETH (on-chain tx: ${txHash.slice(0, 10)}...) to ${selectedRecipient.name}`
-              : `Successfully sent $${transferData.amount} to ${selectedRecipient.name} (off-chain — they have no linked wallet yet).`
+              : `Successfully sent $${transferData.amount} to ${selectedRecipient.name} (in-app only: they have no linked wallet yet).`) +
+              (data.chainWarning ? `\n\n${data.chainWarning}` : "")
           );
           updateUserFields({ walletBalance: data.senderWalletBalance });
           setTransferModalOpen(false);

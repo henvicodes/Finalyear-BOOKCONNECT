@@ -24,6 +24,6 @@ export async function payOnChainIfLinked({ payer, receiver, amountUsd, purpose }
   if (from.toLowerCase() === to.toLowerCase()) {
     return { txHash: "", onChain: false, reason: "same-wallet" };
   }
-  const { txHash } = await makePaymentOnChain(to, (amountUsd * USD_TO_ETH).toFixed(5), purpose);
+  const { txHash } = await makePaymentOnChain(to, (amountUsd * USD_TO_ETH).toFixed(5), purpose, from);
   return { txHash, onChain: true };
 }

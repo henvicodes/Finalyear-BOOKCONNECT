@@ -390,6 +390,16 @@ describe("Ownership checks", () => {
     expect(third.status).toBe(200);
   });
 
+  it("people search includes a linked person's public wallet address (needed to pay them on-chain), and nothing private", async () => {
+    const wallet = "0x1234567890abcdef1234567890abcdef12345678";
+    await request(app).post("/api/auth/link-wallet").set(auth(otherToken)).send({ walletAddress: wallet });
+    const res = await request(app).get("/api/auth/search?q=Other Author").set(auth(readerToken));
+    const person = res.body.data.find((u) => u.name === "Other Author");
+    expect(person.walletAddress).toBe(wallet);
+    expect(person.blockchainWallet.isLinked).toBe(true);
+    expect(JSON.stringify(res.body)).not.toMatch(/walletBalance|walletPin|password|earnings/);
+  });
+
   it("rejects a malformed wallet address", async () => {
     const res = await request(app).post("/api/auth/link-wallet").set(auth(readerToken)).send({ walletAddress: "not-an-address" });
     expect(res.status).toBe(400);

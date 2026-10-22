@@ -488,7 +488,7 @@ const searchUsers = async (req, res) => {
       ],
       role: { $in: ["author", "publisher", "reader"] },
       isSuspended: { $ne: true },
-    }).select("name email role profilePicture publisherVerification.isVerified").limit(100);
+    }).select("name email role profilePicture publisherVerification.isVerified walletAddress blockchainWallet.address blockchainWallet.isLinked").limit(100);
     res.json({ success: true, data: users });
   } catch (error) {
     res.status(500).json({ success: false, message: "Server error" });

@@ -42,8 +42,18 @@ async function getContract() {
  * paying themselves — enforced by the contract itself, not just the UI.
  * Returns the mined transaction hash.
  */
-export async function makePaymentOnChain(receiverAddress, ethAmount, purpose = "p2p_transfer") {
+export async function makePaymentOnChain(receiverAddress, ethAmount, purpose = "p2p_transfer", expectedSender = "") {
   const contract = await getContract();
+  // The server only accepts a payment sent from the wallet linked to the user's
+  // profile, so stop early (before MetaMask asks to confirm) if the selected
+  // MetaMask account is a different one.
+  if (expectedSender) {
+    const actual = await contract.runner.getAddress();
+    if (actual.toLowerCase() !== expectedSender.toLowerCase()) {
+      const short = `${expectedSender.slice(0, 6)}...${expectedSender.slice(-4)}`;
+      throw new Error(`MetaMask is on a different account than the one linked to your profile. Switch MetaMask to ${short} and try again.`);
+    }
+  }
   const value = parseEther(String(ethAmount));
   const tx = await contract.makePayment(receiverAddress, purpose, { value });
   const receipt = await tx.wait();
