@@ -4,7 +4,9 @@
   "main": "server.js",
   "scripts": {
     "test": "jest --runInBand",
-    "start": "node server.js"
+    "start": "node server.js",
+    "demo": "node scripts/demo.js",
+    "demo:seed": "node scripts/demo.js seed"
   },
   "jest": {
     "testEnvironment": "node",

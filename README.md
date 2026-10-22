@@ -181,15 +181,15 @@ python ../ml/export_catalogue.py    # optional: rebuild data/catalogue.json from
 - Safe to re-run: a book that already exists (same title and original author) is skipped.
 
 ### Seeing the admin dashboard with data (optional)
-A demo script fills a separate database with 90 days of sample users, books and payments so the charts have something to show. It refuses to run unless the database name ends in `_demo`, and wipes that database first, so it can never touch real data:
+A demo mode fills a separate database (your database name plus `_demo`) with 90 days of sample users, books and payments, so the admin charts have something to show. It never touches your real data, and the seed refuses to run on any database whose name doesn't end in `_demo`:
 
 ```bash
 cd backend
-MONGO_URI=mongodb://localhost:27017/bookConnect_demo node scripts/seedAdminDemo.js
-MONGO_URI=mongodb://localhost:27017/bookConnect_demo npm start
+npm run demo:seed   # fill the demo database (and reset it any time)
+npm run demo        # start the backend on the demo database
 ```
 
-Then log in as `admin@bookconnect.com` / `DemoAdmin123` (demo database only).
+Then log in as `admin@bookconnect.com` / `DemoAdmin123` (demo database only). Other demo accounts use the same password. To go back to your real data, stop it and run `npm start`.
 
 ### Seed data (optional)
 
