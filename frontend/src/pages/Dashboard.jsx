@@ -8,7 +8,7 @@ import {
   MessageCircle, Award, Zap, Globe, PenTool, Search,
   BarChart2, Clock, CheckCircle, AlertCircle, Plus,
   BookMarked, Layers, DollarSign, UserCheck, FileText,
-  Hash, Lock, Sparkles, ArrowUpRight, Menu, X, HelpCircle
+  Hash, Lock, Sparkles, ArrowUpRight, Menu, X, HelpCircle, UserCircle
 } from "lucide-react";
 import SearchBar from "../components/SearchBar";
 import AdminDashboard from "./AdminDashboard";
@@ -36,6 +36,7 @@ const DashSearchBar = SearchBar;
 
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
 const Sidebar = ({ role, active, setActive, onLogout, user, sidebarOpen, setSidebarOpen }) => {
+  const navigate = useNavigate();
   const authorLinks = [
     { id: "overview",   icon: <BarChart2 size={18} />,    label: "Overview" },
     { id: "mybooks",    icon: <BookOpen size={18} />,      label: "My Books" },
@@ -104,6 +105,9 @@ const Sidebar = ({ role, active, setActive, onLogout, user, sidebarOpen, setSide
               {active === link.id && <ChevronRight size={14} className="link-arrow" />}
             </button>
           ))}
+          <button className="sidebar-link" onClick={() => navigate("/profile")} title="Your profile, MetaMask wallet and payment history">
+            <UserCircle size={18} /><span>Profile & Wallet</span>
+          </button>
         </nav>
         {/* Wallet Balance widget with PIN protection */}
         <div style={{

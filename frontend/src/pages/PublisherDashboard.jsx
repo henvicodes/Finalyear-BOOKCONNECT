@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import axios from "axios";
 import {
   BookOpen, Eye, EyeOff, Star, Clock, CheckCircle, AlertCircle, Shield,
-  Users, DollarSign, MessageCircle, Settings, FileText, Send, RefreshCw, BarChart2, Award, LogOut, HelpCircle
+  Users, DollarSign, MessageCircle, Settings, FileText, Send, RefreshCw, BarChart2, Award, LogOut, HelpCircle, UserCircle
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import ChatInterface from "../components/ChatInterface";
@@ -270,6 +270,9 @@ const PublisherDashboard = ({ user, token, onLogout }) => {
           </button>
           <button className={`sidebar-link ${activeTab === "messages" ? "active" : ""}`} onClick={() => setActiveTab("messages")}>
             <MessageCircle size={18} /><span>Negotiations</span>
+          </button>
+          <button className="sidebar-link" onClick={() => navigate("/profile")} title="Your profile, MetaMask wallet and payment history">
+            <UserCircle size={18} /><span>Profile & Wallet</span>
           </button>
           <button className={`sidebar-link ${activeTab === "settings" ? "active" : ""}`} onClick={() => setActiveTab("settings")}>
             <Settings size={18} /><span>Settings</span>

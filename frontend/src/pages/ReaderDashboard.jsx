@@ -3,9 +3,10 @@ import axios from "axios";
 import {
   BookOpen, Eye, EyeOff, Star, Search, Clock, CheckCircle, Plus, BookMarked, Layers,
   DollarSign, UserCheck, Settings, Heart, AlertCircle, RefreshCw, ChevronRight, Sparkles, LogOut, BarChart2, MessageCircle,
-  Languages, Highlighter, Lock, HelpCircle
+  Languages, Highlighter, Lock, HelpCircle, UserCircle
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import DashboardTopBar from "../components/DashboardTopBar";
 
 // Same language list BookDetail.jsx offers — "english" included so books
 // written in another language can be translated back to English too.
@@ -43,6 +44,7 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
   const { updateUserFields, updateProfile } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("overview");
+  const [sidebarOpen, setSidebarOpen] = useState(false); // sidebar drawer on phones
   const [library, setLibrary] = useState([]);
   const [showBalance, setShowBalance] = useState(false);
   const [balancePinOpen, setBalancePinOpen] = useState(false);
@@ -541,10 +543,30 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
   // Calculate my average rating given reviews left
   const myReviews = discoverBooks.filter(b => b.ratings?.some(r => r.user === user?._id || r.user?._id === user?._id));
 
+  const TAB_TITLES = {
+    overview: "Overview",
+    library: "My Library",
+    discover: "Discover marketplace",
+    readinglist: "Reading List",
+    myreviews: "My Reviews",
+    matchmaker: "Matchmaker",
+    messages: "Messages",
+    settings: "Settings",
+    help: "Help & Guide",
+  };
+
+  // searching from the top bar jumps to Discover with that text
+  const searchFromTopBar = (text) => {
+    setSearchQuery(text);
+    setActiveTab("discover");
+    fetchDiscoverBooks({ search: text });
+  };
+
   return (
     <div className="dashboard-wrapper">
+      {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
       {/* Sidebar */}
-      <aside className="sidebar">
+      <aside className={`sidebar ${sidebarOpen ? "open" : ""}`}>
         <div className="sidebar-header">
           <div className="sidebar-logo"><BookOpen size={22} /><span>BookConnect</span></div>
         </div>
@@ -560,7 +582,7 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
           </div>
         </div>
 
-        <nav className="sidebar-nav">
+        <nav className="sidebar-nav" onClick={() => setSidebarOpen(false)}>
           <button className={`sidebar-link ${activeTab === "overview" ? "active" : ""}`} onClick={() => setActiveTab("overview")}>
             <BarChart2 size={18} /><span>Overview</span>
           </button>
@@ -581,6 +603,9 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
           </button>
           <button className={`sidebar-link ${activeTab === "messages" ? "active" : ""}`} onClick={() => setActiveTab("messages")}>
             <MessageCircle size={18} /><span>Messages</span>
+          </button>
+          <button className="sidebar-link" onClick={() => navigate("/profile")} title="Your profile, MetaMask wallet and payment history">
+            <UserCircle size={18} /><span>Profile & Wallet</span>
           </button>
           <button className={`sidebar-link ${activeTab === "settings" ? "active" : ""}`} onClick={() => setActiveTab("settings")}>
             <Settings size={18} /><span>Settings</span>
@@ -650,6 +675,19 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
 
       {/* Main Area */}
       <div className="dashboard-main">
+        <DashboardTopBar
+          title={TAB_TITLES[activeTab] || "Dashboard"}
+          user={user}
+          onMenu={() => setSidebarOpen(true)}
+          onSearch={searchFromTopBar}
+          searchHint="Search books, authors, genres…"
+          menuItems={[
+            { label: "Profile & Wallet", icon: <UserCircle size={16} />, onClick: () => navigate("/profile") },
+            { label: "Settings", icon: <Settings size={16} />, onClick: () => setActiveTab("settings") },
+            { label: "Help & Guide", icon: <HelpCircle size={16} />, onClick: () => setActiveTab("help") },
+            { label: "Sign out", icon: <LogOut size={16} />, onClick: onLogout, danger: true },
+          ]}
+        />
         <div className="dash-body">
           
           {/* OVERVIEW TAB */}
