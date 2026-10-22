@@ -550,8 +550,12 @@ const ChatInterface = ({ user, currentRole, token, initialContact }) => {
                   No active conversations yet. Search users above to start messaging!
                 </div>
               ) : (
-                conversations.map((c) => {
+                conversations.map((c, _i, all) => {
                   const partner = c.partner;
+                  // two people can share a name (only e-mail is unique), so show the e-mail
+                  // under the name whenever the list has another contact called the same
+                  const sameNameCount = all.filter((o) => !o.partner.isAi && o.partner.name?.toLowerCase() === partner.name?.toLowerCase()).length;
+                  const showEmail = !partner.isAi && sameNameCount > 1 && partner.email;
                   const isSelected = selectedContact?._id === partner._id;
                   const isOnline = onlineUsers.includes(partner._id);
 
@@ -619,6 +623,11 @@ const ChatInterface = ({ user, currentRole, token, initialContact }) => {
                           )}
                         </div>
 
+                        {showEmail && (
+                          <div style={{ fontSize: 10, color: "var(--text-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                            {partner.email}
+                          </div>
+                        )}
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 2 }}>
                           <span style={{ fontSize: 11, color: "var(--text-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 160 }}>
                             {c.lastMessage?.content || "No messages yet"}
