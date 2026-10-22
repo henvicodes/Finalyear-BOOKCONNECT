@@ -53,6 +53,9 @@ async function refund(userId, amount, undoUpdate = {}) {
   }
 }
 
+// A linked wallet is stored in two fields; older/seeded accounts may have only one.
+const walletOf = (user) => (user && (user.walletAddress || (user.blockchainWallet && user.blockchainWallet.address))) || "";
+
 // An on-chain tx hash may back exactly one transaction record.
 async function txHashAlreadyUsed(txHash) {
   return !!(await Transaction.exists({ txHash }));
@@ -75,16 +78,16 @@ async function resolveChainProof(txHash, senderId, receiverId) {
     return { rejected: "This transaction hash was already used for another payment." };
   }
   const [sender, receiver] = await Promise.all([
-    User.findById(senderId).select("walletAddress"),
-    User.findById(receiverId).select("walletAddress"),
+    User.findById(senderId).select("walletAddress blockchainWallet.address"),
+    User.findById(receiverId).select("walletAddress blockchainWallet.address"),
   ]);
   const result = await chainVerifier.verifyPayment({
     txHash,
-    senderAddress: sender && sender.walletAddress,
-    receiverAddress: receiver && receiver.walletAddress,
+    senderAddress: walletOf(sender),
+    receiverAddress: walletOf(receiver),
   });
   if (result.verified) return { onChain: true, txHash };
   return { onChain: false, warning: `On-chain proof not accepted: ${result.reason}` };
 }
 
-module.exports = { resolveChainProof, parseAmount, debit, credit, refund, txHashAlreadyUsed, round };
+module.exports = { walletOf, resolveChainProof, parseAmount, debit, credit, refund, txHashAlreadyUsed, round };

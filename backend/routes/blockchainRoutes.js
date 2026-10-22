@@ -6,7 +6,7 @@ const User = require("../models/User");
 const Transaction = require("../models/Transaction");
 const { protect } = require("../middleware/authMiddleware");
 const { checkPin, setPin, pinFailureResponse } = require("../utils/pin");
-const { parseAmount, debit, credit, refund, resolveChainProof } = require("../utils/wallet");
+const { parseAmount, debit, credit, refund, resolveChainProof, walletOf } = require("../utils/wallet");
 // Module object (not destructured) so tests can replace the verifier.
 const chainVerifier = require("../services/chainVerifier");
 
@@ -100,12 +100,13 @@ router.post("/onchain-register/:id", protect, async (req, res) => {
       return res.status(409).json({ success: false, message: "This transaction was already used for another book." });
     }
 
-    const me = await User.findById(req.user._id).select("walletAddress");
-    if (!me.walletAddress) {
+    const me = await User.findById(req.user._id).select("walletAddress blockchainWallet.address");
+    const myWallet = walletOf(me);
+    if (!myWallet) {
       return res.status(400).json({ success: false, message: "Link your wallet before registering on-chain." });
     }
 
-    const proof = await chainVerifier.verifyRegistration({ txHash, authorAddress: me.walletAddress });
+    const proof = await chainVerifier.verifyRegistration({ txHash, authorAddress: myWallet });
     if (!proof.verified) {
       return res.status(422).json({
         success: false,
