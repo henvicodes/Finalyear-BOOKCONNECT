@@ -32,8 +32,16 @@ router.get("/conversations", protect, async (req, res) => {
       .sort({ createdAt: -1 });
 
     const conversationMap = new Map();
+    // AI-assistant messages are stored with the user as both sender and receiver, so
+    // they must not be grouped by "the other person" (that would list you as a contact).
+    // The newest one is only used for the assistant's preview line.
+    let lastAiMessage = null;
 
     for (const msg of messages) {
+      if (msg.isAi) {
+        if (!lastAiMessage) lastAiMessage = msg;
+        continue;
+      }
       const isSender = msg.sender && msg.sender._id.toString() === userId.toString();
       const partner = isSender ? msg.receiver : msg.sender;
 
@@ -73,18 +81,21 @@ router.get("/conversations", protect, async (req, res) => {
 
     const conversations = Array.from(conversationMap.values());
 
-    // Check if AI Bot conversation exists or add AI Bot contact
-    const hasAiConvo = conversations.some(c => c.partner._id.toString() === AI_BOT_ID);
-    if (!hasAiConvo) {
-      conversations.unshift({
-        partner: AI_BOT_USER,
-        lastMessage: {
-          content: "Hello! I am your AI Assistant. Ask me anything about writing, manuscripts, or publishing!",
-          createdAt: new Date()
-        },
-        unreadCount: 0
-      });
-    }
+    // The AI assistant is always the first contact; its preview is your latest AI message.
+    conversations.unshift({
+      partner: AI_BOT_USER,
+      lastMessage: lastAiMessage
+        ? {
+            _id: lastAiMessage._id,
+            content: lastAiMessage.deletedForEveryone ? "This message was deleted" : lastAiMessage.content,
+            createdAt: lastAiMessage.createdAt,
+          }
+        : {
+            content: "Hello! I am your AI Assistant. Ask me anything about writing, manuscripts, or publishing!",
+            createdAt: new Date(),
+          },
+      unreadCount: 0,
+    });
 
     res.json({ success: true, data: conversations });
   } catch (error) {

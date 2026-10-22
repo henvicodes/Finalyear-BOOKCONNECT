@@ -77,6 +77,26 @@ describe("AI assistant chat", () => {
     expect(res.body.aiResponse.content).not.toMatch(/^Hello/);
   });
 
+  it("does not list you as a contact in your own conversation list", async () => {
+    await ask(token, "hello again");
+    const me = await User.findOne({ email: "chat-tester@example.com" });
+    const res = await request(app).get("/api/messages/conversations").set(auth(token));
+    const partners = res.body.data.map((c) => c.partner._id.toString());
+    expect(partners).toEqual([AI_BOT_ID]); // only the assistant, never yourself
+    expect(partners).not.toContain(me._id.toString());
+    expect(res.body.data[0].lastMessage.content.length).toBeGreaterThan(0);
+  });
+
+  it("an AI chat doesn't hide a real conversation with another person", async () => {
+    const other = await User.create({ name: "Real Person", email: "real-person@example.com", password: "password123", role: "reader", isEmailVerified: true });
+    const me = await User.findOne({ email: "chat-tester@example.com" });
+    await Message.create({ sender: other._id, receiver: me._id, content: "Hi from a person" });
+    const res = await request(app).get("/api/messages/conversations").set(auth(token));
+    const partners = res.body.data.map((c) => c.partner._id.toString());
+    expect(partners).toEqual([AI_BOT_ID, other._id.toString()]);
+    expect(res.body.data[1].unreadCount).toBe(1);
+  });
+
   it("rejects an empty message", async () => {
     const res = await ask(token, "   ");
     expect(res.status).toBe(400);
