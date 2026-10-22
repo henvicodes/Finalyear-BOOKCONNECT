@@ -6,22 +6,50 @@
 // The password is typed at the prompt (hidden), never on the command line, so it
 // doesn't end up in your shell history.
 require("dotenv").config();
-const readline = require("readline");
+const fs = require("fs");
 const mongoose = require("mongoose");
 const User = require("../models/User");
 
+let pipedLines = null; // used only when input is piped in (tests, scripts), not typed
+
+// Asks a question and returns the typed answer without echoing it on screen.
 function askHidden(question) {
+  process.stdout.write(question);
+
+  if (!process.stdin.isTTY) {
+    if (pipedLines === null) pipedLines = fs.readFileSync(0, "utf8").split(/\r?\n/);
+    process.stdout.write("\n");
+    return Promise.resolve(pipedLines.shift() || "");
+  }
+
   return new Promise((resolve) => {
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: true });
-    rl._writeToOutput = (text) => {
-      // print the question, but echo nothing while typing
-      if (text.startsWith(question)) rl.output.write(text);
+    const stdin = process.stdin;
+    let value = "";
+    const finish = () => {
+      stdin.removeListener("data", onData);
+      stdin.setRawMode(false);
+      stdin.pause();
+      process.stdout.write("\n");
     };
-    rl.question(question, (answer) => {
-      rl.output.write("\n");
-      rl.close();
-      resolve(answer);
-    });
+    const onData = (chunk) => {
+      for (const ch of chunk) {
+        if (ch === "\r" || ch === "\n") {
+          finish();
+          return resolve(value);
+        }
+        if (ch === "\u0003") {
+          // Ctrl+C
+          finish();
+          process.exit(130);
+        }
+        if (ch === "\u007f" || ch === "\b") value = value.slice(0, -1); // backspace
+        else if (ch >= " ") value += ch;
+      }
+    };
+    stdin.setEncoding("utf8");
+    stdin.setRawMode(true);
+    stdin.resume();
+    stdin.on("data", onData);
   });
 }
 
@@ -34,6 +62,7 @@ function askHidden(question) {
   }
 
   await mongoose.connect(process.env.MONGO_URI);
+  console.log(`Database: ${mongoose.connection.name}`);
   try {
     const existing = await User.findOne({ email: email.toLowerCase() });
     if (existing) {
@@ -55,6 +84,7 @@ function askHidden(question) {
 
     await User.create({ name, email, password, role: "admin", isEmailVerified: true });
     console.log(`Admin created: ${email.toLowerCase()}`);
+    console.log("You can now log in at the app's login page with that email and password.");
   } finally {
     await mongoose.disconnect();
   }
