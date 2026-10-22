@@ -1,35 +1,13 @@
 import React from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { BookOpen, Users, Clock, TrendingUp } from "lucide-react";
 import StatBubble from "./StatBubble.jsx";
 import VerificationBanner from "./VerificationBanner.jsx";
 import { useBooks } from "../../hooks/useBooks.js";
 import "../../styles/ProfilePage.css";
 
-const ProjectRow = ({ book }) => {
-  const phase =
-    book.status === "published"
-      ? "Published"
-      : book.status === "under_review"
-      ? "In Review"
-      : "Draft";
-
-  const phaseClass = phase.toLowerCase().replace(" ", "-");
-
-  return (
-    <div className="project-item">
-      <div className="project-info">
-        <span className="project-title">{book.title}</span>
-        <span className="project-meta">
-          by {book.author?.name} · {book.genre}
-        </span>
-      </div>
-      <span className={`phase-badge phase--${phaseClass}`}>{phase}</span>
-    </div>
-  );
-};
-
 const PublisherProfileContent = ({ user }) => {
+  const navigate = useNavigate();
   const { books: publishedBooks, loading } = useBooks({
     status: "published",
     limit: 6,
@@ -66,10 +44,10 @@ const PublisherProfileContent = ({ user }) => {
         />
       </div>
 
-      {/* Verification */}
+      {/* Verification Component */}
       {user?.isVerified && <VerificationBanner />}
 
-      {/* Active catalog - real books from DB */}
+      {/* Active catalog */}
       <section className="profile-section">
         <div className="section-header-row">
           <h3 className="profile-section-title">
@@ -82,23 +60,34 @@ const PublisherProfileContent = ({ user }) => {
 
         <div className="project-list">
           {loading && (
-            <p style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>
-              Loading...
-            </p>
+            <p style={{ color: "#64748b", fontSize: 14 }}>Loading...</p>
           )}
           {!loading && publishedBooks.length === 0 && (
-            <p style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>
+            <p style={{ color: "#64748b", fontSize: 14 }}>
               No books in catalog yet.
             </p>
           )}
           {!loading &&
             publishedBooks.map((book) => (
-              <ProjectRow key={book._id} book={book} />
+              <div
+                key={book._id}
+                className="project-item"
+                onClick={() => navigate(`/books/${book._id}`)}
+                style={{ cursor: "pointer" }}
+              >
+                <div className="project-info">
+                  <span className="project-title">{book.title}</span>
+                  <span className="project-meta">
+                    by {book.author?.name || "Unknown Author"} · {book.genre}
+                  </span>
+                </div>
+                <span className="phase-badge phase--published">Published</span>
+              </div>
             ))}
         </div>
       </section>
 
-      {/* Discover authors CTA */}
+      {/* Authors Network CTA */}
       <section className="profile-section">
         <div className="section-header-row">
           <h3 className="profile-section-title">
@@ -108,19 +97,15 @@ const PublisherProfileContent = ({ user }) => {
             Discover +
           </Link>
         </div>
-        <div
-          style={{
-            background: "var(--bg-secondary)",
-            border: "1px dashed var(--border-medium)",
-            borderRadius: "var(--radius-lg)",
-            padding: "1.5rem",
-            textAlign: "center",
-            color: "var(--text-muted)",
-            fontSize: "0.875rem",
-          }}
-        >
-          Discover talented authors on the platform and invite them to publish
-          with you.
+        <div className="authors-network-placeholder">
+          <div className="placeholder-icon">
+            <Users size={32} />
+          </div>
+          <h4>Expand your catalog</h4>
+          <p>
+            Discover talented authors on the platform and invite them to publish
+            with you.
+          </p>
         </div>
       </section>
     </>

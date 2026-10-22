@@ -1,5 +1,5 @@
 import React from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { BookOpen, Users, Star, Award, Clock, BookMarked } from "lucide-react";
 import StatBubble from "./StatBubble.jsx";
 import InterestTag from "./InterestTag.jsx";
@@ -7,23 +7,31 @@ import { useBooks } from "../../hooks/useBooks.js";
 import "../../styles/ProfilePage.css";
 
 // Wishlist cards
-const WishlistCard = ({ book }) => (
-  <div className="wishlist-card">
-    <div className="wishlist-cover">
-      {book.coverImage && book.coverImage !== "default-cover.jpg" ? (
-        <img
-          src={book.coverImage}
-          alt={book.title}
-          style={{ width: "100%", height: "100%", objectFit: "cover" }}
-        />
-      ) : (
-        <BookOpen size={22} />
-      )}
+const WishlistCard = ({ book }) => {
+  const navigate = useNavigate();
+
+  return (
+    <div
+      className="wishlist-card"
+      onClick={() => navigate(`/books/${book._id}`)}
+      style={{ cursor: "pointer" }}
+    >
+      <div className="wishlist-cover">
+        {book.coverImage && book.coverImage !== "default-cover.jpg" ? (
+          <img
+            src={book.coverImage}
+            alt={book.title}
+            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+          />
+        ) : (
+          <BookOpen size={22} />
+        )}
+      </div>
+      <span className="wishlist-title">{book.title}</span>
+      <span className="wishlist-author">{book.author?.name || "Unknown"}</span>
     </div>
-    <span className="wishlist-title">{book.title}</span>
-    <span className="wishlist-author">{book.author?.name || "Unknown"}</span>
-  </div>
-);
+  );
+};
 
 const AddWishlistCard = () => (
   <div className="wishlist-card wishlist-card--add">
@@ -33,6 +41,8 @@ const AddWishlistCard = () => (
 );
 
 const ReaderProfileContent = ({ user }) => {
+  const navigate = useNavigate();
+
   // Show latest published books as "recommended reading" for this reader
   const { books: latestBooks, loading } = useBooks({
     status: "published",
@@ -92,7 +102,7 @@ const ReaderProfileContent = ({ user }) => {
         </section>
       )}
 
-      {/* Recent reads - showing latest published books from DB as placeholder */}
+      {/* Recent reads */}
       <section className="profile-section">
         <div className="section-header-row">
           <h3 className="profile-section-title">
@@ -105,13 +115,16 @@ const ReaderProfileContent = ({ user }) => {
 
         <div className="book-list">
           {loading && (
-            <p style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>
-              Loading...
-            </p>
+            <p style={{ color: "#64748b", fontSize: "0.85rem" }}>Loading...</p>
           )}
           {!loading &&
             latestBooks.map((book) => (
-              <div key={book._id} className="book-list-item">
+              <div
+                key={book._id}
+                className="book-list-item"
+                onClick={() => navigate(`/books/${book._id}`)}
+                style={{ cursor: "pointer" }}
+              >
                 <div className="book-cover-placeholder">
                   {book.coverImage &&
                   book.coverImage !== "default-cover.jpg" ? (
@@ -162,7 +175,7 @@ const ReaderProfileContent = ({ user }) => {
         </div>
       </section>
 
-      {/* Wishlist - show genre-matched books from DB */}
+      {/* Wishlist */}
       <section className="profile-section">
         <h3 className="profile-section-title">
           <BookMarked size={16} /> Suggested for You

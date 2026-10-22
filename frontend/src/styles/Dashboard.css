@@ -1122,3 +1122,33 @@ textarea.input-field {
     line-height: 1.7 !important;
   }
 }
+/* ── Reader Library Redesign ────────────────────────────────────────────── */
+.library-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.library-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
+}
+
+/* Responsive Adjustments for Library */
+@media (max-width: 768px) {
+  .library-card {
+    flex-direction: column !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .library-card {
+    padding: 16px !important;
+  }
+  .library-card > div:first-child {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+  .library-card > div:first-child > div:first-child {
+    margin-bottom: 12px;
+  }
+}

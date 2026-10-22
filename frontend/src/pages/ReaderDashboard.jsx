@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 import {
   BookOpen,
@@ -22,19 +23,22 @@ import {
   LogOut,
   BarChart2,
   MessageCircle,
+  Menu,
+  X,
+  Bell,
 } from "lucide-react";
 import RatingStars from "../components/RatingStars";
 import ChatInterface from "../components/ChatInterface";
 import WalletPinModal from "../components/WalletPinModal";
+import SearchBar from "../components/SearchBar";
 import { useAuth } from "../context/AuthContext";
 import { sendMetaMaskTransaction } from "../services/web3";
+import "../styles/Dashboard.css";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
-// Format helper
 const fmt = (n) => (n >= 1000 ? (n / 1000).toFixed(1) + "K" : String(n || 0));
 
-// Stat Card
 const StatCard = ({ icon, label, value, color }) => (
   <div className="stat-card">
     <div className="stat-icon" style={{ background: color + "1a", color }}>
@@ -49,46 +53,36 @@ const StatCard = ({ icon, label, value, color }) => (
 
 const ReaderDashboard = ({ user, token, onLogout }) => {
   const { updateUserFields } = useAuth();
+  const navigate = useNavigate(); // Added for navigation
+
   const [activeTab, setActiveTab] = useState("overview");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
   const [library, setLibrary] = useState([]);
   const [showBalance, setShowBalance] = useState(false);
   const [balancePinOpen, setBalancePinOpen] = useState(false);
   const [purchasePinOpen, setPurchasePinOpen] = useState(false);
   const [pendingPurchaseBook, setPendingPurchaseBook] = useState(null);
-  const [loadingLib, setLoadingLib] = useState(false);
 
-  // Discover Marketplace
   const [discoverBooks, setDiscoverBooks] = useState([]);
   const [loadingDiscover, setLoadingDiscover] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedGenre, setSelectedGenre] = useState("");
 
-  // Reading Progress states (saved in localStorage)
   const [progresses, setProgresses] = useState(() => {
     const saved = localStorage.getItem("reader_progresses");
     return saved ? JSON.parse(saved) : {};
   });
 
-  // Reading List (pinned)
   const [readingList, setReadingList] = useState(() => {
     const saved = localStorage.getItem("reader_reading_list");
     return saved ? JSON.parse(saved) : [];
   });
 
-  // Detail Modal
-  const [selectedBook, setSelectedBook] = useState(null);
-  const [activeChapterIdx, setActiveChapterIdx] = useState(null);
-
-  // Reader display settings (Wattpad / Magazine style)
-  const [readerTheme, setReaderTheme] = useState("sepia");
-  const [readerFontSize, setReaderFontSize] = useState("medium");
-
-  // Reviews CRUD states
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewText, setReviewText] = useState("");
   const [submittingReview, setSubmittingReview] = useState(false);
 
-  // Authors listing for Matchmaker
   const [authors, setAuthors] = useState([]);
   const [loadingAuthors, setLoadingAuthors] = useState(false);
 
@@ -99,18 +93,13 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
   }, []);
 
   const fetchLibrary = async () => {
-    setLoadingLib(true);
     try {
       const { data } = await axios.get(`${BASE_URL}/api/reader/user/library`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (data.success) {
-        setLibrary(data.data || []);
-      }
+      if (data.success) setLibrary(data.data || []);
     } catch (err) {
       console.error("Library fetch error:", err);
-    } finally {
-      setLoadingLib(false);
     }
   };
 
@@ -125,9 +114,7 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
       const { data } = await axios.get(
         `${BASE_URL}/api/books?${params.toString()}`,
       );
-      if (data.success) {
-        setDiscoverBooks(data.data || []);
-      }
+      if (data.success) setDiscoverBooks(data.data || []);
     } catch (err) {
       console.error(err);
     } finally {
@@ -141,9 +128,8 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
       const { data } = await axios.get(`${BASE_URL}/api/auth/search?q=@`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (data.success) {
+      if (data.success)
         setAuthors(data.data.filter((u) => u.role === "author"));
-      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -161,11 +147,9 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
     fetchDiscoverBooks(genre, searchQuery);
   };
 
-  // Purchase/Unlock a paid book — now PIN + MetaMask gated
   const handlePurchaseBook = (book) => {
     const isPaid = book.isPaid || book.price > 0;
     if (!isPaid) {
-      // Free unlock: no PIN/MetaMask needed, proceed directly
       executePurchase(book, "");
       return;
     }
@@ -182,9 +166,8 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
       );
       if (data.success) {
         alert(data.message + (txHash ? `\nTx: ${txHash.slice(0, 14)}...` : ""));
-        if (data.walletBalance !== undefined) {
+        if (data.walletBalance !== undefined)
           updateUserFields({ walletBalance: data.walletBalance });
-        }
         fetchLibrary();
         fetchDiscoverBooks(selectedGenre, searchQuery);
       }
@@ -217,115 +200,84 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
     await executePurchase(book, txHash);
   };
 
-  // Reading Progress update
   const handleProgressChange = (bookId, val) => {
     const updated = { ...progresses, [bookId]: parseInt(val) };
     setProgresses(updated);
     localStorage.setItem("reader_progresses", JSON.stringify(updated));
   };
 
-  // Add to reading list
   const toggleReadingList = (book) => {
     const exists = readingList.some((item) => item._id === book._id);
-    let updated;
-    if (exists) {
-      updated = readingList.filter((item) => item._id !== book._id);
-    } else {
-      updated = [...readingList, book];
-    }
+    const updated = exists
+      ? readingList.filter((item) => item._id !== book._id)
+      : [...readingList, book];
     setReadingList(updated);
     localStorage.setItem("reader_reading_list", JSON.stringify(updated));
   };
 
-  // Add/Edit Review
-  const handleSubmitReview = async (e) => {
-    e.preventDefault();
-    if (!selectedBook) return;
-    setSubmittingReview(true);
-    try {
-      const { data } = await axios.post(
-        `${BASE_URL}/api/books/${selectedBook._id}/rate`,
-        {
-          rating: reviewRating,
-          review: reviewText,
-        },
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
-      if (data.success) {
-        alert("Review submitted successfully!");
-        setReviewText("");
-        // Reload discover book details
-        const updatedBookRes = await axios.get(
-          `${BASE_URL}/api/books/${selectedBook._id}`,
-        );
-        if (updatedBookRes.data.success) {
-          setSelectedBook(updatedBookRes.data.data);
-        }
-        fetchDiscoverBooks(selectedGenre, searchQuery);
-      }
-    } catch (err) {
-      alert("Error submitting review.");
-    } finally {
-      setSubmittingReview(false);
-    }
-  };
-
-  // Delete review helper
-  const handleDeleteReview = async () => {
-    if (!window.confirm("Are you sure you want to delete your review?")) return;
-    setSubmittingReview(true);
-    try {
-      // Rates with score 1 (standard resets) or we can clear
-      await axios.post(
-        `${BASE_URL}/api/books/${selectedBook._id}/rate`,
-        {
-          rating: 1,
-          review: "",
-        },
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
-      alert("Review cleared.");
-      setReviewText("");
-      const updatedBookRes = await axios.get(
-        `${BASE_URL}/api/books/${selectedBook._id}`,
-      );
-      if (updatedBookRes.data.success) {
-        setSelectedBook(updatedBookRes.data.data);
-      }
-      fetchDiscoverBooks(selectedGenre, searchQuery);
-    } catch (err) {
-      alert("Error clearing review.");
-    } finally {
-      setSubmittingReview(false);
-    }
-  };
-
-  const isUnlocked = (bookId) => {
-    return library.some((b) => b._id === bookId);
-  };
-
-  // Calculate my average rating given reviews left
+  const isUnlocked = (bookId) => library.some((b) => b._id === bookId);
   const myReviews = discoverBooks.filter((b) =>
     b.ratings?.some((r) => r.user === user?._id || r.user?._id === user?._id),
   );
 
+  const navLinks = [
+    { id: "overview", icon: <BarChart2 size={18} />, label: "Overview" },
+    {
+      id: "library",
+      icon: <BookMarked size={18} />,
+      label: `My Library (${library.length})`,
+    },
+    { id: "discover", icon: <Search size={18} />, label: "Discover" },
+    {
+      id: "readinglist",
+      icon: <Heart size={18} />,
+      label: `Reading List (${readingList.length})`,
+    },
+    {
+      id: "myreviews",
+      icon: <Star size={18} />,
+      label: `My Reviews (${myReviews.length})`,
+    },
+    { id: "matchmaker", icon: <UserCheck size={18} />, label: "Matchmaker" },
+    { id: "messages", icon: <MessageCircle size={18} />, label: "Messages" },
+  ];
+
   return (
     <div className="dashboard-wrapper">
+      {sidebarOpen && (
+        <div
+          className="sidebar-overlay"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
-      <aside className="sidebar">
+      <aside className={`sidebar ${sidebarOpen ? "open" : ""}`}>
         <div className="sidebar-header">
-          <div className="sidebar-logo">
-            <BookOpen size={22} />
+          <Link
+            to="/"
+            className="sidebar-logo"
+            style={{ textDecoration: "none" }}
+          >
+            <BookOpen size={22} color="#7c3aed" />
             <span>BookConnect</span>
-          </div>
+          </Link>
+          <button
+            className="sidebar-close"
+            onClick={() => setSidebarOpen(false)}
+          >
+            <X size={18} />
+          </button>
         </div>
+
         <div className="sidebar-user">
           <div className="sidebar-avatar" style={{ background: "#059669" }}>
-            {user?.name?.[0]?.toUpperCase()}
+            {user?.profilePicture &&
+            user.profilePicture !== "default-avatar.png" ? (
+              <img src={user.profilePicture} alt={user.name} />
+            ) : (
+              user?.name?.[0]?.toUpperCase()
+            )}
           </div>
           <div className="sidebar-user-info">
             <span className="sidebar-user-name">{user?.name}</span>
@@ -339,84 +291,29 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
         </div>
 
         <nav className="sidebar-nav">
-          <button
-            className={`sidebar-link ${
-              activeTab === "overview" ? "active" : ""
-            }`}
-            onClick={() => setActiveTab("overview")}
-          >
-            <BarChart2 size={18} />
-            <span>Overview</span>
-          </button>
-          <button
-            className={`sidebar-link ${
-              activeTab === "library" ? "active" : ""
-            }`}
-            onClick={() => setActiveTab("library")}
-          >
-            <BookMarked size={18} />
-            <span>My Library ({library.length})</span>
-          </button>
-          <button
-            className={`sidebar-link ${
-              activeTab === "discover" ? "active" : ""
-            }`}
-            onClick={() => setActiveTab("discover")}
-          >
-            <Search size={18} />
-            <span>Discover marketplace</span>
-          </button>
-          <button
-            className={`sidebar-link ${
-              activeTab === "readinglist" ? "active" : ""
-            }`}
-            onClick={() => setActiveTab("readinglist")}
-          >
-            <Heart size={18} />
-            <span>Reading List ({readingList.length})</span>
-          </button>
-          <button
-            className={`sidebar-link ${
-              activeTab === "myreviews" ? "active" : ""
-            }`}
-            onClick={() => setActiveTab("myreviews")}
-          >
-            <Star size={18} />
-            <span>My Reviews ({myReviews.length})</span>
-          </button>
-          <button
-            className={`sidebar-link ${
-              activeTab === "matchmaker" ? "active" : ""
-            }`}
-            onClick={() => setActiveTab("matchmaker")}
-          >
-            <UserCheck size={18} />
-            <span>Matchmaker</span>
-          </button>
-          <button
-            className={`sidebar-link ${
-              activeTab === "messages" ? "active" : ""
-            }`}
-            onClick={() => setActiveTab("messages")}
-          >
-            <MessageCircle size={18} />
-            <span>Messages</span>
-          </button>
+          <div className="sidebar-section-label">Workspace</div>
+          {navLinks.map((link) => (
+            <button
+              key={link.id}
+              className={`sidebar-link ${
+                activeTab === link.id ? "active" : ""
+              }`}
+              onClick={() => {
+                setActiveTab(link.id);
+                setSidebarOpen(false);
+              }}
+              style={activeTab === link.id ? { color: "#059669" } : {}}
+            >
+              {link.icon}
+              <span>{link.label}</span>
+              {activeTab === link.id && (
+                <ChevronRight size={14} className="link-arrow" />
+              )}
+            </button>
+          ))}
         </nav>
 
-        {/* Wallet Balance widget — masked by default (GPay style) */}
-        <div
-          style={{
-            margin: "10px 16px",
-            padding: "12px 14px",
-            background: "rgba(5, 150, 105, 0.04)",
-            border: "1px solid rgba(5, 150, 105, 0.12)",
-            borderRadius: 12,
-            display: "flex",
-            flexDirection: "column",
-            gap: 6,
-          }}
-        >
+        <div className="sidebar-wallet">
           <div
             style={{
               display: "flex",
@@ -427,10 +324,10 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
             <span
               style={{
                 fontSize: 10,
-                color: "#64748b",
+                color: "#94a3b8",
                 textTransform: "uppercase",
                 letterSpacing: "0.05em",
-                fontWeight: "bold",
+                fontWeight: 700,
               }}
             >
               Wallet Balance
@@ -446,18 +343,24 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
                 cursor: "pointer",
                 padding: 0,
               }}
-              title={showBalance ? "Hide balance" : "Reveal with PIN"}
             >
               {showBalance ? <EyeOff size={14} /> : <Eye size={14} />}
             </button>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <DollarSign size={14} color="#059669" />
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              marginTop: 4,
+            }}
+          >
+            <DollarSign size={16} color="#059669" />
             <strong
               style={{
-                fontSize: 15,
-                color: "#1e293b",
-                fontFamily: "sans-serif",
+                fontSize: 18,
+                color: "#0f172a",
+                fontFamily: "'Sora', sans-serif",
               }}
             >
               {showBalance
@@ -465,7 +368,7 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
                     ? user.walletBalance
                     : 1000
                   ).toFixed(2)}`
-                : "$ ••••••"}
+                : "••••••"}
             </strong>
           </div>
         </div>
@@ -476,7 +379,6 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
         </button>
       </aside>
 
-      {/* PIN Modal — Reveal Balance */}
       <WalletPinModal
         isOpen={balancePinOpen}
         onClose={() => setBalancePinOpen(false)}
@@ -487,8 +389,6 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
         token={token}
         title="Enter PIN to View Wallet Balance"
       />
-
-      {/* PIN Modal — Purchase Authorization */}
       <WalletPinModal
         isOpen={purchasePinOpen}
         onClose={() => {
@@ -504,6 +404,27 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
 
       {/* Main Area */}
       <div className="dashboard-main">
+        <header className="dash-topbar">
+          <button className="menu-btn" onClick={() => setSidebarOpen(true)}>
+            <Menu size={20} />
+          </button>
+
+          <div style={{ flex: 1, maxWidth: 480, margin: "0 20px" }}>
+            <SearchBar />
+          </div>
+
+          <div className="topbar-right">
+            <Link to="/profile" className="topbar-avatar">
+              {user?.profilePicture &&
+              user.profilePicture !== "default-avatar.png" ? (
+                <img src={user.profilePicture} alt={user.name} />
+              ) : (
+                user?.name?.[0]?.toUpperCase()
+              )}
+            </Link>
+          </div>
+        </header>
+
         <div className="dash-body">
           {/* OVERVIEW TAB */}
           {activeTab === "overview" && (
@@ -553,13 +474,13 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
               </div>
 
               <div className="dash-grid">
-                {/* Current Reads / Library progress */}
                 <div className="dash-panel">
                   <div className="panel-header">
                     <h3>My Reading Progress</h3>
                     <button
                       className="panel-link"
                       onClick={() => setActiveTab("library")}
+                      style={{ color: "#059669" }}
                     >
                       Go to library
                     </button>
@@ -567,7 +488,7 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
                   {library.length === 0 ? (
                     <p
                       style={{
-                        fontSize: 12,
+                        fontSize: 13,
                         color: "#94a3b8",
                         padding: "10px 0",
                       }}
@@ -583,23 +504,54 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
                           style={{
                             display: "flex",
                             flexDirection: "column",
-                            gap: 6,
-                            padding: "10px 0",
-                            borderBottom: "1px solid rgba(0,0,0,0.03)",
+                            gap: 8,
+                            padding: "12px 0",
+                            borderBottom: "1px solid #f1f5f9",
                           }}
                         >
                           <div
                             style={{
                               display: "flex",
-                              justify: "space-between",
-                              fontSize: 13,
-                              fontWeight: "bold",
+                              justifyContent: "space-between",
+                              fontSize: 14,
+                              fontWeight: 600,
+                              color: "#0f172a",
+                              alignItems: "center",
                             }}
                           >
-                            <span>{b.title}</span>
-                            <span style={{ color: "#059669" }}>
-                              {pct}% read
+                            <span
+                              style={{
+                                flex: 1,
+                                whiteSpace: "nowrap",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                marginRight: 16,
+                              }}
+                            >
+                              {b.title}
                             </span>
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 12,
+                              }}
+                            >
+                              <span style={{ color: "#059669", fontSize: 12 }}>
+                                {pct}% read
+                              </span>
+                              <button
+                                onClick={() => navigate(`/books/${b._id}`)}
+                                className="edit-btn"
+                                style={{
+                                  background: "#ecfdf5",
+                                  color: "#059669",
+                                  padding: "4px 8px",
+                                }}
+                              >
+                                Continue
+                              </button>
+                            </div>
                           </div>
                           <input
                             type="range"
@@ -617,7 +569,6 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
                   )}
                 </div>
 
-                {/* Recommendations */}
                 <div className="dash-panel">
                   <div className="panel-header">
                     <h3>Personalized Recommendations</h3>
@@ -636,30 +587,30 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
                           display: "flex",
                           gap: 12,
                           alignItems: "center",
-                          padding: 10,
-                          background: "rgba(5, 150, 105, 0.03)",
-                          borderRadius: 8,
-                          border: "1px solid rgba(5, 150, 105, 0.1)",
+                          padding: 12,
+                          background: "#f0fdf4",
+                          borderRadius: 10,
+                          border: "1px solid #dcfce7",
                         }}
                       >
                         <BookOpen size={24} color="#059669" />
                         <div style={{ flex: 1 }}>
                           <span
                             style={{
-                              fontSize: 13,
-                              fontWeight: "bold",
+                              fontSize: 14,
+                              fontWeight: 600,
                               display: "block",
+                              color: "#0f172a",
                             }}
                           >
                             {b.title}
                           </span>
-                          <span style={{ fontSize: 10, color: "#64748b" }}>
-                            Recommended based on your interest in: {b.genre}
+                          <span style={{ fontSize: 11, color: "#64748b" }}>
+                            Interest: {b.genre}
                           </span>
                         </div>
                         <button
                           onClick={() => {
-                            setSelectedBook(b);
                             setActiveTab("discover");
                           }}
                           style={{
@@ -679,7 +630,7 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
             </div>
           )}
 
-          {/* MY LIBRARY TAB */}
+          {/* MY LIBRARY TAB (Redesigned) */}
           {activeTab === "library" && (
             <div className="dash-content animate-fade-in">
               <div className="dash-welcome">
@@ -708,8 +659,9 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "repeat(3, 1fr)",
-                    gap: 16,
+                    gridTemplateColumns:
+                      "repeat(auto-fill, minmax(320px, 1fr))",
+                    gap: 24,
                   }}
                 >
                   {library.map((b) => {
@@ -717,37 +669,69 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
                     return (
                       <div
                         key={b._id}
-                        className="glass-panel"
+                        className="glass-panel library-card"
                         style={{
-                          padding: 20,
+                          padding: 0,
+                          overflow: "hidden",
                           display: "flex",
                           flexDirection: "column",
-                          gap: 12,
                         }}
                       >
-                        <div style={{ display: "flex", gap: 10 }}>
+                        {/* Cover / Header */}
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: 16,
+                            padding: 20,
+                            borderBottom: "1px solid #f1f5f9",
+                          }}
+                        >
                           <div
                             style={{
-                              width: 40,
-                              height: 50,
-                              background: "#ecfdf5",
-                              color: "#059669",
+                              width: 64,
+                              height: 90,
+                              background: "#f3f0ff",
+                              color: "#7c3aed",
                               borderRadius: 8,
                               display: "flex",
                               alignItems: "center",
-                              justify: "center",
+                              justifyContent: "center",
+                              flexShrink: 0,
+                              overflow: "hidden",
+                              boxShadow: "0 4px 10px rgba(0,0,0,0.08)",
                             }}
                           >
-                            <span style={{ margin: "auto" }}>
-                              <BookOpen size={18} />
-                            </span>
+                            {b.coverImage &&
+                            b.coverImage !== "default-cover.jpg" ? (
+                              <img
+                                src={b.coverImage}
+                                alt={b.title}
+                                style={{
+                                  width: "100%",
+                                  height: "100%",
+                                  objectFit: "cover",
+                                }}
+                              />
+                            ) : (
+                              <BookOpen size={28} />
+                            )}
                           </div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
+                          <div
+                            style={{
+                              flex: 1,
+                              minWidth: 0,
+                              display: "flex",
+                              flexDirection: "column",
+                              justifyContent: "center",
+                            }}
+                          >
                             <span
                               style={{
                                 display: "block",
-                                fontSize: 13,
-                                fontWeight: "bold",
+                                fontSize: 16,
+                                fontWeight: 700,
+                                color: "#0f172a",
+                                marginBottom: 4,
                                 overflow: "hidden",
                                 textOverflow: "ellipsis",
                                 whiteSpace: "nowrap",
@@ -758,25 +742,41 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
                             <span
                               style={{
                                 display: "block",
-                                fontSize: 10,
+                                fontSize: 13,
                                 color: "#64748b",
+                                marginBottom: 8,
                               }}
                             >
                               by {b.author?.name}
                             </span>
+                            <span
+                              className="book-status new"
+                              style={{
+                                textTransform: "capitalize",
+                                background: "rgba(5, 150, 105, 0.1)",
+                                color: "#059669",
+                                width: "fit-content",
+                              }}
+                            >
+                              {b.genre}
+                            </span>
                           </div>
                         </div>
 
-                        <div>
+                        {/* Progress */}
+                        <div style={{ padding: "20px 20px 16px" }}>
                           <div
                             style={{
                               display: "flex",
-                              justify: "space-between",
-                              fontSize: 11,
-                              marginBottom: 4,
+                              justifyContent: "space-between",
+                              fontSize: 12,
+                              fontWeight: 600,
+                              marginBottom: 8,
                             }}
                           >
-                            <span>Progress Tracker</span>
+                            <span style={{ color: "#64748b" }}>
+                              Reading Progress
+                            </span>
                             <strong style={{ color: "#059669" }}>{pct}%</strong>
                           </div>
                           <input
@@ -791,515 +791,32 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
                           />
                         </div>
 
-                        <button
-                          onClick={() => {
-                            setSelectedBook(b);
-                            setActiveChapterIdx(0);
-                          }}
-                          style={{
-                            width: "100%",
-                            padding: "8px",
-                            background: "#059669",
-                            color: "#fff",
-                            border: "none",
-                            borderRadius: 8,
-                            fontSize: 12,
-                            fontWeight: "bold",
-                            cursor: "pointer",
-                            marginTop: 6,
-                          }}
+                        {/* Actions */}
+                        <div
+                          style={{ padding: "0 20px 20px", marginTop: "auto" }}
                         >
-                          Read Chapters
-                        </button>
+                          <button
+                            onClick={() => navigate(`/books/${b._id}`)}
+                            className="btn-primary"
+                            style={{
+                              width: "100%",
+                              background: "#059669",
+                              justifyContent: "center",
+                              padding: "10px",
+                            }}
+                          >
+                            Continue Reading
+                          </button>
+                        </div>
                       </div>
                     );
                   })}
                 </div>
               )}
-
-              {/* Book Chapters Reader Panel */}
-              {selectedBook && activeChapterIdx !== null && (
-                <div
-                  className="glass-panel animate-fade-in"
-                  style={{
-                    padding: 0,
-                    marginTop: 24,
-                    borderRadius: 16,
-                    overflow: "hidden",
-                    border: "1px solid rgba(0,0,0,0.08)",
-                    boxShadow: "0 10px 25px -5px rgba(0,0,0,0.05)",
-                  }}
-                >
-                  {/* Top Bar */}
-                  <div
-                    style={{
-                      display: "flex",
-                      justify: "space-between",
-                      alignItems: "center",
-                      padding: "16px 24px",
-                      background: "rgba(255,255,255,0.02)",
-                      borderBottom: "1px solid rgba(0,0,0,0.06)",
-                    }}
-                  >
-                    <div>
-                      <h3
-                        style={{ fontSize: 16, fontWeight: "bold", margin: 0 }}
-                      >
-                        {selectedBook.title}
-                      </h3>
-                      <span style={{ fontSize: 12, color: "#64748b" }}>
-                        by {selectedBook.author?.name}
-                      </span>
-                    </div>
-                    <button
-                      onClick={() => {
-                        setActiveChapterIdx(null);
-                        setSelectedBook(null);
-                      }}
-                      className="btn-secondary"
-                      style={{
-                        padding: "6px 12px",
-                        fontSize: 12,
-                        borderColor: "#ef4444",
-                        color: "#ef4444",
-                      }}
-                    >
-                      Close Reader
-                    </button>
-                  </div>
-
-                  {/* Settings Control Panel */}
-                  <div
-                    style={{
-                      display: "flex",
-                      justify: "space-between",
-                      alignItems: "center",
-                      flexWrap: "wrap",
-                      gap: 12,
-                      padding: "12px 24px",
-                      background: "rgba(0,0,0,0.02)",
-                      borderBottom: "1px solid rgba(0,0,0,0.06)",
-                      fontSize: 12,
-                    }}
-                  >
-                    {/* Theme selector */}
-                    <div
-                      style={{ display: "flex", alignItems: "center", gap: 8 }}
-                    >
-                      <span style={{ color: "#64748b", fontWeight: 500 }}>
-                        Theme:
-                      </span>
-                      <div style={{ display: "flex", gap: 6 }}>
-                        {[
-                          {
-                            id: "light",
-                            label: "Light",
-                            bg: "#ffffff",
-                            color: "#1f2937",
-                            border: "#e2e8f0",
-                          },
-                          {
-                            id: "sepia",
-                            label: "Sepia ☕",
-                            bg: "#fbf0e3",
-                            color: "#433422",
-                            border: "#f3e1cb",
-                          },
-                          {
-                            id: "dark",
-                            label: "Dark 🌙",
-                            bg: "#151522",
-                            color: "#e2e8f0",
-                            border: "#27273a",
-                          },
-                        ].map((t) => (
-                          <button
-                            key={t.id}
-                            onClick={() => setReaderTheme(t.id)}
-                            style={{
-                              padding: "4px 10px",
-                              borderRadius: 6,
-                              border:
-                                readerTheme === t.id
-                                  ? `2px solid #059669`
-                                  : `1px solid ${t.border}`,
-                              background: t.bg,
-                              color: t.color,
-                              fontWeight:
-                                readerTheme === t.id ? "bold" : "normal",
-                              cursor: "pointer",
-                              fontSize: 11,
-                              boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
-                            }}
-                          >
-                            {t.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Font size selector */}
-                    <div
-                      style={{ display: "flex", alignItems: "center", gap: 8 }}
-                    >
-                      <span style={{ color: "#64748b", fontWeight: 500 }}>
-                        Font Size:
-                      </span>
-                      <div style={{ display: "flex", gap: 4 }}>
-                        {[
-                          { id: "small", label: "A-", val: "14px" },
-                          { id: "medium", label: "A", val: "16px" },
-                          { id: "large", label: "A+", val: "20px" },
-                          { id: "xl", label: "A++", val: "24px" },
-                        ].map((sz) => (
-                          <button
-                            key={sz.id}
-                            onClick={() => setReaderFontSize(sz.id)}
-                            style={{
-                              padding: "4px 8px",
-                              borderRadius: 4,
-                              border: "1px solid #d1d5db",
-                              background:
-                                readerFontSize === sz.id
-                                  ? "#059669"
-                                  : "#ffffff",
-                              color:
-                                readerFontSize === sz.id
-                                  ? "#ffffff"
-                                  : "#374151",
-                              fontWeight: "bold",
-                              cursor: "pointer",
-                              fontSize:
-                                sz.id === "small"
-                                  ? 10
-                                  : sz.id === "medium"
-                                  ? 11
-                                  : sz.id === "large"
-                                  ? 13
-                                  : 15,
-                            }}
-                          >
-                            {sz.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Main Book Reader Layout */}
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "250px 1fr",
-                      minHeight: "500px",
-                    }}
-                  >
-                    {/* Sidebar Chapters navigation */}
-                    <div
-                      style={{
-                        background: "rgba(0,0,0,0.01)",
-                        borderRight: "1px solid rgba(0,0,0,0.06)",
-                        padding: 16,
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 6,
-                        maxHeight: "600px",
-                        overflowY: "auto",
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontSize: 11,
-                          fontWeight: "bold",
-                          color: "#64748b",
-                          textTransform: "uppercase",
-                          letterSpacing: "0.05em",
-                          marginBottom: 8,
-                          paddingLeft: 8,
-                        }}
-                      >
-                        Table of Contents
-                      </div>
-                      {selectedBook.chapters?.map((ch, idx) => (
-                        <button
-                          key={ch._id || idx}
-                          onClick={() => setActiveChapterIdx(idx)}
-                          style={{
-                            padding: "10px 14px",
-                            border: "none",
-                            borderRadius: 8,
-                            textAlign: "left",
-                            fontSize: 12,
-                            cursor: "pointer",
-                            transition: "all 0.2s ease",
-                            background:
-                              activeChapterIdx === idx
-                                ? "rgba(5, 150, 105, 0.1)"
-                                : "transparent",
-                            color:
-                              activeChapterIdx === idx ? "#059669" : "#334155",
-                            fontWeight:
-                              activeChapterIdx === idx ? "bold" : "normal",
-                          }}
-                        >
-                          <div
-                            style={{
-                              display: "flex",
-                              gap: 8,
-                              alignItems: "center",
-                            }}
-                          >
-                            <span
-                              style={{
-                                width: 18,
-                                height: 18,
-                                borderRadius: "50%",
-                                background:
-                                  activeChapterIdx === idx
-                                    ? "#059669"
-                                    : "rgba(0,0,0,0.05)",
-                                color:
-                                  activeChapterIdx === idx ? "#fff" : "#64748b",
-                                display: "inline-flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                fontSize: 9,
-                                fontWeight: "bold",
-                              }}
-                            >
-                              {idx + 1}
-                            </span>
-                            <span
-                              style={{
-                                textOverflow: "ellipsis",
-                                overflow: "hidden",
-                                whiteSpace: "nowrap",
-                                flex: 1,
-                              }}
-                            >
-                              {ch.title || `Chapter ${idx + 1}`}
-                            </span>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-
-                    {/* Chapter Content area styled with themes */}
-                    <div
-                      style={{
-                        position: "relative",
-                        padding: "40px 80px",
-                        overflowY: "auto",
-                        maxHeight: "600px",
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "center",
-                        background:
-                          readerTheme === "light"
-                            ? "#ffffff"
-                            : readerTheme === "sepia"
-                            ? "#fbf0e3"
-                            : "#151522",
-                        color:
-                          readerTheme === "light"
-                            ? "#1f2937"
-                            : readerTheme === "sepia"
-                            ? "#433422"
-                            : "#e2e8f0",
-                        transition: "all 0.3s ease",
-                      }}
-                    >
-                      {/* Left click navigation zone */}
-                      {activeChapterIdx > 0 && (
-                        <div
-                          onClick={() =>
-                            setActiveChapterIdx((prev) => prev - 1)
-                          }
-                          title="Previous Chapter"
-                          style={{
-                            position: "absolute",
-                            left: 0,
-                            top: 0,
-                            width: "70px",
-                            height: "100%",
-                            cursor: "w-resize",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            zIndex: 10,
-                            background:
-                              "linear-gradient(to right, rgba(0,0,0,0.03), transparent)",
-                            transition: "all 0.2s ease",
-                            opacity: 0,
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.opacity = 1;
-                            e.currentTarget.style.background =
-                              "linear-gradient(to right, rgba(0,0,0,0.06), transparent)";
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.opacity = 0;
-                            e.currentTarget.style.background =
-                              "linear-gradient(to right, rgba(0,0,0,0.03), transparent)";
-                          }}
-                        >
-                          <span
-                            style={{
-                              fontSize: 32,
-                              opacity: 0.6,
-                              fontWeight: "300",
-                            }}
-                          >
-                            ‹
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Right click navigation zone */}
-                      {selectedBook.chapters &&
-                        activeChapterIdx < selectedBook.chapters.length - 1 && (
-                          <div
-                            onClick={() => {
-                              const nextIdx = activeChapterIdx + 1;
-                              setActiveChapterIdx(nextIdx);
-                              const newPct = Math.round(
-                                (nextIdx / selectedBook.chapters.length) * 100,
-                              );
-                              handleProgressChange(selectedBook._id, newPct);
-                            }}
-                            title="Next Chapter"
-                            style={{
-                              position: "absolute",
-                              right: 0,
-                              top: 0,
-                              width: "70px",
-                              height: "100%",
-                              cursor: "e-resize",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              zIndex: 10,
-                              background:
-                                "linear-gradient(to left, rgba(0,0,0,0.03), transparent)",
-                              transition: "all 0.2s ease",
-                              opacity: 0,
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.opacity = 1;
-                              e.currentTarget.style.background =
-                                "linear-gradient(to left, rgba(0,0,0,0.06), transparent)";
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.opacity = 0;
-                              e.currentTarget.style.background =
-                                "linear-gradient(to left, rgba(0,0,0,0.03), transparent)";
-                            }}
-                          >
-                            <span
-                              style={{
-                                fontSize: 32,
-                                opacity: 0.6,
-                                fontWeight: "300",
-                              }}
-                            >
-                              ›
-                            </span>
-                          </div>
-                        )}
-
-                      {selectedBook.chapters &&
-                      selectedBook.chapters[activeChapterIdx] ? (
-                        <div
-                          style={{
-                            maxWidth: "680px",
-                            width: "100%",
-                            fontFamily: "Georgia, serif",
-                          }}
-                        >
-                          {/* Chapter Title */}
-                          <h2
-                            style={{
-                              fontSize: 26,
-                              fontWeight: "bold",
-                              marginBottom: 24,
-                              borderBottom: `1px solid ${
-                                readerTheme === "light"
-                                  ? "rgba(0,0,0,0.08)"
-                                  : readerTheme === "sepia"
-                                  ? "rgba(67,52,34,0.1)"
-                                  : "rgba(255,255,255,0.1)"
-                              }`,
-                              paddingBottom: 16,
-                              textAlign: "center",
-                              color: "inherit",
-                            }}
-                          >
-                            {selectedBook.chapters[activeChapterIdx].title}
-                          </h2>
-
-                          {/* Chapter Body */}
-                          <div
-                            style={{
-                              fontSize:
-                                readerFontSize === "small"
-                                  ? "14px"
-                                  : readerFontSize === "medium"
-                                  ? "17px"
-                                  : readerFontSize === "large"
-                                  ? "21px"
-                                  : "25px",
-                              lineHeight: 1.8,
-                              whiteSpace: "pre-wrap",
-                              textAlign: "justify",
-                              color: "inherit",
-                            }}
-                          >
-                            {selectedBook.chapters[activeChapterIdx].content}
-                          </div>
-
-                          {/* Bottom Metadata Info */}
-                          <div
-                            style={{
-                              display: "flex",
-                              justify: "center",
-                              alignItems: "center",
-                              marginTop: 48,
-                              paddingTop: 24,
-                              borderTop: `1px solid ${
-                                readerTheme === "light"
-                                  ? "rgba(0,0,0,0.08)"
-                                  : readerTheme === "sepia"
-                                  ? "rgba(67,52,34,0.1)"
-                                  : "rgba(255,255,255,0.1)"
-                              }`,
-                            }}
-                          >
-                            <span
-                              style={{
-                                fontSize: 12,
-                                color: "#64748b",
-                                fontFamily: "sans-serif",
-                              }}
-                            >
-                              Chapter {activeChapterIdx + 1} of{" "}
-                              {selectedBook.chapters.length} • Click side edges
-                              to turn pages
-                            </span>
-                          </div>
-                        </div>
-                      ) : (
-                        <p style={{ color: "#94a3b8" }}>
-                          No chapter content loaded.
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
           )}
 
-          {/* DISCOVER MARKETPLACE TAB */}
+          {/* DISCOVER TAB */}
           {activeTab === "discover" && (
             <div className="dash-content animate-fade-in">
               <div className="dash-welcome">
@@ -1312,11 +829,10 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
                 </div>
               </div>
 
-              {/* Search & Genre row */}
-              <div className="glass-panel" style={{ padding: 20 }}>
+              <div className="glass-panel" style={{ padding: 24 }}>
                 <form
                   onSubmit={handleSearch}
-                  style={{ display: "flex", gap: 12, marginBottom: 16 }}
+                  style={{ display: "flex", gap: 12, marginBottom: 20 }}
                 >
                   <input
                     type="text"
@@ -1329,7 +845,7 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
                   <button
                     type="submit"
                     className="btn-primary"
-                    style={{ background: "#059669" }}
+                    style={{ background: "#059669", padding: "0 24px" }}
                   >
                     Search
                   </button>
@@ -1350,15 +866,15 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
                       key={g}
                       onClick={() => handleGenreChange(g)}
                       style={{
-                        padding: "6px 12px",
+                        padding: "6px 14px",
                         borderRadius: 20,
-                        border: "1.5px solid #ede9fe",
-                        fontSize: 11,
+                        border: "1.5px solid #e2e8f0",
+                        fontSize: 12,
                         fontWeight: 600,
                         cursor: "pointer",
                         textTransform: "capitalize",
                         background: selectedGenre === g ? "#059669" : "#fff",
-                        color: selectedGenre === g ? "#fff" : "#64748b",
+                        color: selectedGenre === g ? "#fff" : "#475569",
                       }}
                     >
                       {g || "All Genres"}
@@ -1367,11 +883,10 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
                 </div>
               </div>
 
-              {/* Marketplace list */}
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "repeat(3, 1fr)",
+                  gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
                   gap: 20,
                 }}
               >
@@ -1380,11 +895,15 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
                     style={{
                       gridColumn: "1/-1",
                       display: "flex",
-                      justify: "center",
+                      justifyContent: "center",
                       padding: 40,
                     }}
                   >
-                    <RefreshCw className="animate-spin" size={24} />
+                    <RefreshCw
+                      className="animate-spin"
+                      size={24}
+                      color="#059669"
+                    />
                   </div>
                 ) : discoverBooks.length === 0 ? (
                   <p
@@ -1402,7 +921,6 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
                     const pinned = readingList.some(
                       (item) => item._id === b._id,
                     );
-
                     return (
                       <div
                         key={b._id}
@@ -1411,14 +929,15 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
                           padding: 20,
                           display: "flex",
                           flexDirection: "column",
-                          gap: 12,
+                          gap: 16,
                         }}
                       >
                         <div>
                           <div
                             style={{
                               display: "flex",
-                              justify: "space-between",
+                              justifyContent: "space-between",
+                              marginBottom: 12,
                             }}
                           >
                             <span
@@ -1441,16 +960,17 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
                               }}
                             >
                               <Heart
-                                size={16}
+                                size={18}
                                 fill={pinned ? "currentColor" : "none"}
                               />
                             </button>
                           </div>
                           <h3
                             style={{
-                              fontSize: 14,
-                              fontWeight: "bold",
-                              marginTop: 8,
+                              fontSize: 16,
+                              fontWeight: 700,
+                              color: "#0f172a",
+                              marginBottom: 4,
                               overflow: "hidden",
                               textOverflow: "ellipsis",
                               whiteSpace: "nowrap",
@@ -1458,39 +978,37 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
                           >
                             {b.title}
                           </h3>
-                          <span style={{ fontSize: 11, color: "#64748b" }}>
+                          <span style={{ fontSize: 12, color: "#64748b" }}>
                             by {b.author?.name}
                           </span>
                         </div>
-
                         <p
                           style={{
-                            fontSize: 11,
+                            fontSize: 13,
                             color: "#64748b",
                             lineHeight: 1.5,
                             display: "-webkit-box",
                             WebkitLineClamp: 3,
                             WebkitBoxOrient: "vertical",
                             overflow: "hidden",
-                            height: 50,
+                            minHeight: 58,
                           }}
                         >
                           {b.description}
                         </p>
-
                         <div
                           style={{
                             display: "flex",
-                            justify: "space-between",
+                            justifyContent: "space-between",
                             alignItems: "center",
-                            marginTop: 4,
+                            marginTop: "auto",
                           }}
                         >
                           <span
                             style={{
-                              fontSize: 13,
-                              fontWeight: "bold",
-                              color: "#1a1a2e",
+                              fontSize: 15,
+                              fontWeight: 700,
+                              color: "#0f172a",
                             }}
                           >
                             {b.isPaid ? `$${b.price}` : "Free"}
@@ -1499,32 +1017,28 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
                             style={{
                               display: "flex",
                               alignItems: "center",
-                              gap: 3,
-                              fontSize: 11,
+                              gap: 4,
+                              fontSize: 12,
                               color: "#f59e0b",
+                              fontWeight: 600,
                             }}
                           >
-                            <Star size={12} fill="currentColor" />{" "}
+                            <Star size={14} fill="currentColor" />{" "}
                             {b.averageRating > 0 ? b.averageRating : "—"}
                           </span>
                         </div>
-
                         {unlocked ? (
                           <button
-                            onClick={() => {
-                              setSelectedBook(b);
-                            }}
+                            onClick={() => navigate(`/books/${b._id}`)}
                             className="btn-secondary"
                             style={{
                               width: "100%",
                               justifyContent: "center",
-                              fontSize: 12,
-                              padding: 8,
                               borderColor: "#059669",
                               color: "#059669",
                             }}
                           >
-                            Read Details & Reviews
+                            Read Book
                           </button>
                         ) : (
                           <button
@@ -1532,9 +1046,7 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
                             className="btn-primary"
                             style={{
                               width: "100%",
-                              justify: "center",
-                              fontSize: 12,
-                              padding: 8,
+                              justifyContent: "center",
                               background: "#059669",
                             }}
                           >
@@ -1548,193 +1060,6 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
                   })
                 )}
               </div>
-
-              {/* Book reviews detail panel overlay */}
-              {selectedBook && !activeChapterIdx && (
-                <div
-                  className="glass-panel"
-                  style={{ padding: 24, marginTop: 20 }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      justify: "space-between",
-                      borderBottom: "1px solid rgba(0,0,0,0.06)",
-                      paddingBottom: 12,
-                      marginBottom: 16,
-                    }}
-                  >
-                    <div>
-                      <h2>{selectedBook.title} Reviews</h2>
-                      <span style={{ fontSize: 12 }}>
-                        Average Rating:{" "}
-                        <strong style={{ color: "#f59e0b" }}>
-                          {selectedBook.averageRating} / 5
-                        </strong>{" "}
-                        ({selectedBook.ratings?.length || 0} reviews)
-                      </span>
-                    </div>
-                    <button
-                      onClick={() => setSelectedBook(null)}
-                      style={{
-                        background: "none",
-                        border: "none",
-                        color: "#64748b",
-                        cursor: "pointer",
-                        fontSize: 12,
-                      }}
-                    >
-                      Close
-                    </button>
-                  </div>
-
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "1fr 1fr",
-                      gap: 24,
-                    }}
-                  >
-                    {/* Add/Edit Review form */}
-                    <div>
-                      <h4>Submit Rating & Review</h4>
-                      <form
-                        onSubmit={handleSubmitReview}
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: 12,
-                          marginTop: 12,
-                        }}
-                      >
-                        <div>
-                          <label
-                            className="form-label"
-                            style={{ fontSize: 12 }}
-                          >
-                            Choose Stars:
-                          </label>
-                          <RatingStars
-                            rating={reviewRating}
-                            setRating={setReviewRating}
-                            size={22}
-                          />
-                        </div>
-                        <div>
-                          <label
-                            className="form-label"
-                            style={{ fontSize: 12 }}
-                          >
-                            Review Comments:
-                          </label>
-                          <textarea
-                            className="input-field"
-                            required
-                            placeholder="Write your review here..."
-                            value={reviewText}
-                            onChange={(e) => setReviewText(e.target.value)}
-                            style={{ height: 80, fontSize: 12 }}
-                          />
-                        </div>
-                        <div style={{ display: "flex", gap: 10 }}>
-                          <button
-                            type="submit"
-                            disabled={submittingReview}
-                            className="btn-primary"
-                            style={{
-                              background: "#059669",
-                              padding: "6px 16px",
-                              fontSize: 12,
-                            }}
-                          >
-                            Submit Review
-                          </button>
-                          {selectedBook.ratings?.some(
-                            (r) =>
-                              r.user === user?._id || r.user?._id === user?._id,
-                          ) && (
-                            <button
-                              type="button"
-                              onClick={handleDeleteReview}
-                              className="btn-secondary"
-                              style={{
-                                padding: "6px 16px",
-                                fontSize: 12,
-                                borderColor: "#ef4444",
-                                color: "#ef4444",
-                              }}
-                            >
-                              Delete Review
-                            </button>
-                          )}
-                        </div>
-                      </form>
-                    </div>
-
-                    {/* Review Feed */}
-                    <div
-                      style={{
-                        maxHeight: 240,
-                        overflowY: "auto",
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 10,
-                      }}
-                    >
-                      <h4>Reader Reviews Feed</h4>
-                      {selectedBook.ratings?.length === 0 ? (
-                        <p
-                          style={{
-                            fontSize: 12,
-                            color: "#94a3b8",
-                            marginTop: 10,
-                          }}
-                        >
-                          No reviews left yet.
-                        </p>
-                      ) : (
-                        selectedBook.ratings?.map((r, idx) => (
-                          <div
-                            key={idx}
-                            style={{
-                              padding: 10,
-                              background: "rgba(0,0,0,0.01)",
-                              border: "1px solid rgba(0,0,0,0.03)",
-                              borderRadius: 8,
-                            }}
-                          >
-                            <div
-                              style={{
-                                display: "flex",
-                                justify: "space-between",
-                                alignItems: "center",
-                              }}
-                            >
-                              <strong style={{ fontSize: 12 }}>
-                                Reader {r.user?.name || "Anonymous"}
-                              </strong>
-                              <RatingStars
-                                rating={r.rating}
-                                readOnly
-                                size={12}
-                              />
-                            </div>
-                            <p
-                              style={{
-                                fontSize: 11,
-                                color: "#374151",
-                                marginTop: 4,
-                              }}
-                            >
-                              {r.review}
-                            </p>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
           )}
 
@@ -1763,7 +1088,8 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
                   <div
                     style={{
                       display: "grid",
-                      gridTemplateColumns: "repeat(2, 1fr)",
+                      gridTemplateColumns:
+                        "repeat(auto-fill, minmax(300px, 1fr))",
                       gap: 16,
                     }}
                   >
@@ -1772,51 +1098,59 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
                         key={b._id}
                         style={{
                           display: "flex",
-                          justify: "space-between",
+                          justifyContent: "space-between",
                           alignItems: "center",
-                          padding: 14,
-                          background: "rgba(0,0,0,0.01)",
-                          border: "1px solid rgba(0,0,0,0.03)",
-                          borderRadius: 10,
+                          padding: 16,
+                          background: "#f8fafc",
+                          border: "1px solid #e2e8f0",
+                          borderRadius: 12,
                         }}
                       >
                         <div
                           style={{
                             display: "flex",
-                            gap: 10,
+                            gap: 12,
                             alignItems: "center",
                           }}
                         >
-                          <BookMarked size={18} color="#059669" />
+                          <div
+                            style={{
+                              width: 40,
+                              height: 40,
+                              borderRadius: 8,
+                              background: "#ecfdf5",
+                              color: "#059669",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                          >
+                            <BookMarked size={18} />
+                          </div>
                           <div>
                             <span
                               style={{
-                                fontSize: 13,
-                                fontWeight: "bold",
+                                fontSize: 14,
+                                fontWeight: 700,
+                                color: "#0f172a",
                                 display: "block",
                               }}
                             >
                               {b.title}
                             </span>
-                            <span style={{ fontSize: 10, color: "#64748b" }}>
+                            <span style={{ fontSize: 12, color: "#64748b" }}>
                               by {b.author?.name}
                             </span>
                           </div>
                         </div>
                         <button
-                          onClick={() => {
-                            setSelectedBook(b);
-                            setActiveTab("discover");
-                          }}
+                          onClick={() => navigate(`/books/${b._id}`)}
+                          className="btn-secondary"
                           style={{
-                            padding: "5px 12px",
-                            background: "rgba(5, 150, 105, 0.1)",
+                            padding: "6px 12px",
+                            fontSize: 12,
+                            borderColor: "#059669",
                             color: "#059669",
-                            border: "none",
-                            borderRadius: 6,
-                            fontSize: 11,
-                            fontWeight: "bold",
-                            cursor: "pointer",
                           }}
                         >
                           View Book
@@ -1875,7 +1209,7 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
                             border: "1px solid rgba(0,0,0,0.03)",
                             borderRadius: 10,
                             display: "flex",
-                            justify: "space-between",
+                            justifyContent: "space-between",
                             alignItems: "center",
                           }}
                         >
@@ -1906,10 +1240,7 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
                               size={14}
                             />
                             <button
-                              onClick={() => {
-                                setSelectedBook(b);
-                                setActiveTab("discover");
-                              }}
+                              onClick={() => navigate(`/books/${b._id}`)}
                               className="edit-btn"
                               style={{
                                 background: "#ede9fe",
@@ -1928,7 +1259,7 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
             </div>
           )}
 
-          {/* DYNAMIC MATCHMAKER TAB */}
+          {/* MATCHMAKER TAB */}
           {activeTab === "matchmaker" && (
             <div className="dash-content animate-fade-in">
               <div className="dash-welcome">
@@ -1944,7 +1275,11 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
               <div className="glass-panel" style={{ padding: 20 }}>
                 {loadingAuthors ? (
                   <div
-                    style={{ display: "flex", justify: "center", padding: 20 }}
+                    style={{
+                      display: "flex",
+                      justifyContent: "center",
+                      padding: 20,
+                    }}
                   >
                     <RefreshCw className="animate-spin" size={24} />
                   </div>
@@ -1961,7 +1296,6 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
                     }}
                   >
                     {authors.map((a, idx) => {
-                      // Calculate overlap matches
                       const overlap =
                         a.interests?.filter((tag) =>
                           user?.interests?.includes(tag),
@@ -1984,7 +1318,7 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
                             border: "1px solid rgba(124, 58, 237, 0.1)",
                             borderRadius: 12,
                             display: "flex",
-                            justify: "space-between",
+                            justifyContent: "space-between",
                             alignItems: "center",
                           }}
                         >
@@ -2043,13 +1377,12 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
                               ))}
                             </div>
                           </div>
-
                           <button
-                            onClick={() => {
+                            onClick={() =>
                               alert(
                                 "Matchmaker simulation: Author added to reading recommendations list!",
-                              );
-                            }}
+                              )
+                            }
                             style={{
                               padding: "6px 14px",
                               background: "#7c3aed",
@@ -2075,7 +1408,7 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
             </div>
           )}
 
-          {/* MESSAGES / CHAT TAB */}
+          {/* MESSAGES TAB */}
           {activeTab === "messages" && (
             <div
               className="dash-content animate-fade-in"

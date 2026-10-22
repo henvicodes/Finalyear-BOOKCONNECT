@@ -6,6 +6,7 @@
   box-sizing: border-box;
 }
 
+/* ── Base Page ──────────────────────────────────────────────────────────── */
 .profile-page {
   min-height: 100vh;
   background: #f8f7ff;
@@ -20,7 +21,7 @@
   padding: 0 24px;
 }
 
-/* Glassmorphic Profile Header Banner */
+/* ── Header / Hero ──────────────────────────────────────────────────────── */
 .profile-cover {
   background: #ffffff;
   border-bottom: 1px solid #ede9fe;
@@ -186,7 +187,7 @@
   padding: 0 24px;
 }
 
-/* Stats Row aligned with Dashboard stat cards */
+/* ── Stats Row ──────────────────────────────────────────────────────────── */
 .profile-stats-row {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -253,7 +254,7 @@
   margin-top: 2px;
 }
 
-/* Glassmorphic Sections */
+/* ── Sections ───────────────────────────────────────────────────────────── */
 .profile-section {
   background: #ffffff;
   border: 1px solid #ede9fe;
@@ -318,6 +319,7 @@
   background: #6d28d9;
 }
 
+/* ── Tags ───────────────────────────────────────────────────────────────── */
 .tags-row {
   display: flex;
   flex-wrap: wrap;
@@ -335,7 +337,42 @@
   text-transform: capitalize;
 }
 
-/* Improved Book List Item */
+/* ── Verification Banner ────────────────────────────────────────────────── */
+.verification-banner {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 24px;
+  color: #065f46;
+}
+
+.verification-banner svg {
+  flex-shrink: 0;
+}
+
+.verification-title {
+  display: block;
+  font-weight: 700;
+  font-size: 14px;
+  margin-bottom: 2px;
+}
+
+.verification-sub {
+  display: block;
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.verification-check {
+  margin-left: auto;
+  color: #10b981;
+}
+
+/* ── Book List Item (Author & Reader) ───────────────────────────────────── */
 .book-list-item {
   display: flex;
   align-items: center;
@@ -469,6 +506,7 @@
   color: #d1d5db;
 }
 
+/* ── Status Badges ──────────────────────────────────────────────────────── */
 .status-badge {
   font-size: 11px;
   font-weight: 600;
@@ -483,28 +521,257 @@
   background: #d1fae5;
   color: #059669;
 }
-
 .status-badge--reading {
   background: #fef3c7;
   color: #d97706;
 }
-
 .status-badge--want-to-read {
   background: #f3f0ff;
   color: #7c3aed;
 }
-
 .status-badge--published {
   background: #ecfdf5;
   color: #059669;
 }
-
 .status-badge--draft {
   background: #f1f5f9;
   color: #64748b;
 }
-
 .status-badge--under_review {
   background: #fef3c7;
   color: #d97706;
+}
+
+/* ── Reader Wishlist / Suggested for You ────────────────────────────────── */
+.wishlist-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 16px;
+}
+
+.wishlist-card {
+  background: #ffffff;
+  border: 1px solid #ede9fe;
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.wishlist-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 20px rgba(124, 58, 237, 0.08);
+  border-color: #c4b5fd;
+}
+
+.wishlist-cover {
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  background: #f3f0ff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #7c3aed;
+}
+
+.wishlist-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.wishlist-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1a1a2e;
+  padding: 12px 12px 4px;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.wishlist-author {
+  font-size: 11px;
+  color: #64748b;
+  padding: 0 12px 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wishlist-card--add {
+  align-items: center;
+  justify-content: center;
+  background: #f8fafc;
+  border: 2px dashed #cbd5e1;
+  color: #64748b;
+  min-height: 200px;
+}
+
+.wishlist-card--add:hover {
+  background: #f3f0ff;
+  border-color: #7c3aed;
+  color: #7c3aed;
+}
+
+.wishlist-add-icon {
+  font-size: 32px;
+  font-weight: 300;
+  margin-bottom: 8px;
+}
+
+/* ── Publisher Project Catalog ──────────────────────────────────────────── */
+.project-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.project-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  background: #ffffff;
+  border: 1px solid #ede9fe;
+  border-radius: 12px;
+  transition: all 0.2s ease;
+}
+
+.project-item:hover {
+  background: #faf8ff;
+  border-color: #c4b5fd;
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.04);
+  transform: translateX(4px);
+}
+
+.project-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.project-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #1a1a2e;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.project-meta {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.phase-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+  text-transform: capitalize;
+  flex-shrink: 0;
+}
+
+.phase--published {
+  background: #d1fae5;
+  color: #059669;
+}
+.phase--in-review {
+  background: #fef3c7;
+  color: #d97706;
+}
+.phase--draft {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+/* ── Authors Network Placeholder ────────────────────────────────────────── */
+.authors-network-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 32px 20px;
+  background: #f8fafc;
+  border: 2px dashed #cbd5e1;
+  border-radius: 12px;
+}
+
+.placeholder-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: #f3f0ff;
+  color: #7c3aed;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.authors-network-placeholder h4 {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1a1a2e;
+  margin: 0 0 8px 0;
+}
+
+.authors-network-placeholder p {
+  font-size: 13px;
+  color: #64748b;
+  max-width: 400px;
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* ── Responsive ─────────────────────────────────────────────────────────── */
+@media (max-width: 1024px) {
+  .profile-cover-inner {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 768px) {
+  .profile-cover-inner {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 16px;
+  }
+  .profile-name-row,
+  .profile-meta-row {
+    justify-content: center;
+  }
+  .profile-stats-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .btn-edit-profile,
+  .btn-logout-profile {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .profile-stats-row {
+    grid-template-columns: 1fr;
+  }
+  .wishlist-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .project-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .phase-badge {
+    align-self: flex-start;
+  }
 }
