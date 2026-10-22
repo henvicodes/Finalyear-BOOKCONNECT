@@ -189,7 +189,7 @@ MONGO_URI=mongodb://localhost:27017/bookConnect_demo node scripts/seedAdminDemo.
 MONGO_URI=mongodb://localhost:27017/bookConnect_demo npm start
 ```
 
-Then log in as `demo-admin@example.com` / `DemoAdmin123` (demo database only).
+Then log in as `admin@bookconnect.com` / `DemoAdmin123` (demo database only).
 
 ### Seed data (optional)
 

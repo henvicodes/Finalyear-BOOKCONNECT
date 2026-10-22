@@ -49,7 +49,7 @@ const TITLES = ["The Last Monsoon", "Paper Lanterns", "Code of the Rivers", "Mid
   });
   const fullName = () => `${pick(FIRST)} ${pick(LAST)}`;
 
-  const admin = user("Demo Admin", "admin", daysAgo(120), { email: "demo-admin@example.com" });
+  const admin = user("BookConnect Admin", "admin", daysAgo(120), { email: "admin@bookconnect.com" });
   const publishers = Array.from({ length: 4 }, (_, i) => user(`${pick(LAST)} Press ${i + 1}`, "publisher", daysAgo(between(60, 100))));
   publishers[0].publisherVerification = { status: "approved", isVerified: true, companyName: publishers[0].name, registrationType: "GSTIN", registrationNumber: "27AAPFU0939F1ZV", documentLink: "https://example.com/doc.pdf", reviewedAt: daysAgo(40), reviewedBy: admin._id };
   publishers[1].publisherVerification = { status: "pending", isVerified: false, companyName: publishers[1].name, registrationType: "CIN", registrationNumber: "U22110MH2010PTC123456", documentLink: "https://example.com/cin.pdf", submittedAt: daysAgo(1) };
@@ -126,7 +126,7 @@ const TITLES = ["The Last Monsoon", "Paper Lanterns", "Code of the Rivers", "Mid
   await db.collection("auditlogs").insertMany(audit);
 
   console.log(`Seeded ${all.length} users, ${books.length} books, ${txs.length} payments into "${dbName}".`);
-  console.log("Log in as demo-admin@example.com / DemoAdmin123 (demo database only).");
+  console.log("Log in as admin@bookconnect.com / DemoAdmin123 (demo database only).");
   await mongoose.disconnect();
 })().catch((err) => {
   console.error("Seeding failed:", err.message);
