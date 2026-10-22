@@ -9,6 +9,7 @@ import {
 import { useAuth } from "../context/AuthContext";
 import ThemeToggle from "./ThemeToggle";
 import "../styles/Navbar.css";
+import { authorOf } from "../utils/bookDisplay";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
@@ -202,7 +203,7 @@ const SearchBar = () => {
                   <div className="sb-info">
                     <div className="sb-ititle">{b.title}</div>
                     <div className="sb-isub">
-                      by {b.author?.name || "Unknown"}{b.genre ? ` · ${b.genre}` : ""}{b.isPaid ? " · Paid" : " · Free"}
+                      by {authorOf(b) || "Unknown"}{b.genre ? ` · ${b.genre}` : ""}{b.isPaid ? " · Paid" : " · Free"}
                     </div>
                   </div>
                   {b.averageRating > 0 && <span className="sb-rating">⭐ {b.averageRating?.toFixed(1)}</span>}

@@ -6,6 +6,7 @@ import WalletCard from "./WalletCard.jsx";
 import VerificationBanner from "./VerificationBanner.jsx";
 import { useBooks } from "../../hooks/useBooks.js";
 import "../../styles/ProfilePage.css";
+import { authorOf } from "../../utils/bookDisplay";
 
 const ProjectRow = ({ book }) => {
   const phase =
@@ -22,7 +23,7 @@ const ProjectRow = ({ book }) => {
       <div className="project-info">
         <span className="project-title">{book.title}</span>
         <span className="project-meta">
-          by {book.author?.name} · {book.genre}
+          by {authorOf(book)} · {book.genre}
         </span>
       </div>
       <span className={`phase-badge phase--${phaseClass}`}>{phase}</span>

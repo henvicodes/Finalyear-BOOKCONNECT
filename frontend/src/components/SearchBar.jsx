@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import { APP_HEADERS } from "../utils/session";
 import { Search, Filter, ChevronDown, X, Sparkles, Loader, BookOpen, Users } from "lucide-react";
+import { authorOf } from "../utils/bookDisplay";
 
 // ── Search Bar ────────────────────────────────────────────────────────────────
 const GENRES  = ["Fiction","Non-Fiction","Science","Technology","History","Philosophy","Poetry","Romance"];
@@ -164,7 +165,7 @@ const SearchBar = () => {
                   <div className="sb-bookico"><BookOpen size={13}/></div>
                   <div className="sb-info">
                     <div className="sb-ititle">{b.title}</div>
-                    <div className="sb-isub">by {b.author?.name||"Unknown"}{b.genre?` · ${b.genre}`:""}{b.isPaid?" · Paid":" · Free"}</div>
+                    <div className="sb-isub">by {authorOf(b)||"Unknown"}{b.genre?` · ${b.genre}`:""}{b.isPaid?" · Paid":" · Free"}</div>
                   </div>
                   {b.averageRating>0 && <span className="sb-rating">⭐ {b.averageRating?.toFixed(1)}</span>}
                 </div>

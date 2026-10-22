@@ -4,6 +4,7 @@ import { ArrowLeft, BookOpen, Star, User, Calendar, Languages, RefreshCw, Lock }
 import { useBook, useChapters, useChapterContent } from "../../hooks/useBooks";
 import api from "../../utils/api";
 import "../../styles/BookDetail.css";
+import { authorOf, sourceLine } from "../../utils/bookDisplay";
 
 // "english" is included so books originally written in another language
 // (per their `language` field) can be translated back to English too —
@@ -93,10 +94,17 @@ const BookDetail = () => {
             <h1 className="book-detail-title">{book.title}</h1>
             <div className="book-detail-meta">
               <span className="book-detail-author">
-                <User size={14} /> by {book.author?.name}
+                <User size={14} /> by {authorOf(book)}
               </span>
               <span className="book-detail-genre">{book.genre}</span>
             </div>
+            {sourceLine(book) && (
+              <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "4px 0 0" }}>
+                {book.source?.url ? (
+                  <a href={book.source.url} target="_blank" rel="noopener noreferrer" style={{ color: "inherit" }}>{sourceLine(book)}</a>
+                ) : sourceLine(book)}
+              </p>
+            )}
             {book.averageRating > 0 && (
               <div className="book-detail-rating">
                 <Star size={16} className="star-filled" />

@@ -22,6 +22,7 @@ import WelcomeBanner from "../components/WelcomeBanner";
 import HelpTip from "../components/HelpTip";
 import { useAuth } from "../context/AuthContext";
 import { payOnChainIfLinked } from "../services/chainPayment";
+import { authorOf, sourceLine } from "../utils/bookDisplay";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
@@ -727,7 +728,7 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <span style={{ display: "block", fontSize: 13, fontWeight: "bold", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.title}</span>
-                            <span style={{ display: "block", fontSize: 10, color: "var(--text-secondary)" }}>by {b.author?.name}</span>
+                            <span style={{ display: "block", fontSize: 10, color: "var(--text-secondary)" }}>by {authorOf(b)}</span>
                           </div>
                         </div>
 
@@ -794,7 +795,10 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
                   }}>
                     <div>
                       <h3 style={{ fontSize: 16, fontWeight: "bold", margin: 0 }}>{selectedBook.title}</h3>
-                      <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>by {selectedBook.author?.name}</span>
+                      <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>by {authorOf(selectedBook)}</span>
+                      {sourceLine(selectedBook) && (
+                        <span style={{ display: "block", fontSize: 11, color: "var(--text-muted)" }}>{sourceLine(selectedBook)}</span>
+                      )}
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -1238,7 +1242,7 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
                             </button>
                           </div>
                           <h3 style={{ fontSize: 14, fontWeight: "bold", marginTop: 8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.title}</h3>
-                          <span style={{ fontSize: 11, color: "var(--text-secondary)" }}>by {b.author?.name}</span>
+                          <span style={{ fontSize: 11, color: "var(--text-secondary)" }}>by {authorOf(b)}</span>
                         </div>
 
                         <p style={{ fontSize: 11, color: "var(--text-secondary)", lineHeight: 1.5, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden", height: 50 }}>
@@ -1365,7 +1369,7 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
                           <BookMarked size={18} color="var(--success)" />
                           <div>
                             <span style={{ fontSize: 13, fontWeight: "bold", display: "block" }}>{b.title}</span>
-                            <span style={{ fontSize: 10, color: "var(--text-secondary)" }}>by {b.author?.name}</span>
+                            <span style={{ fontSize: 10, color: "var(--text-secondary)" }}>by {authorOf(b)}</span>
                           </div>
                         </div>
                         <button

@@ -25,12 +25,11 @@ const getBooks = async (req, res) => {
 
     if (genre) query.genre = genre;
     if (author) query.author = author;
-    if (search) {
-      query.$or = [
-        { title: { $regex: search, $options: "i" } },
-        { description: { $regex: search, $options: "i" } },
-        { tags: { $regex: search, $options: "i" } },
-      ];
+    if (typeof search === "string" && search.trim()) {
+      // Matched literally: the text is escaped so it can't be used as a regex
+      // (injection / catastrophic backtracking).
+      const rx = { $regex: search.trim().slice(0, 100).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" };
+      query.$or = [{ title: rx }, { originalAuthor: rx }, { description: rx }, { tags: rx }];
     }
 
     const skip = (Number(page) - 1) * Number(limit);

@@ -53,7 +53,7 @@ router.get("/", protect, async (req, res) => {
   try {
     const userId = req.user._id;
 
-    const LIST_FIELDS = "title description genre tags coverImage price isPaid averageRating totalRatings totalReads author";
+    const LIST_FIELDS = "title description genre tags coverImage price isPaid averageRating totalRatings totalReads author originalAuthor";
 
     const [user, candidates] = await Promise.all([
       User.findById(userId).populate("purchasedBooks", "title description genre tags"),

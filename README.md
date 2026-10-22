@@ -93,6 +93,20 @@ node scripts/createAdmin.js you@example.com "Your Name"
 
 The password is typed at a hidden prompt, not on the command line. Run it with an existing account's email to promote that account instead (its password is unchanged).
 
+### Filling the app with real books (optional)
+Two scripts add a real catalogue to your database, all owned by one `BookConnect Library` account (it can't be logged into) and credited to each book's real author via `originalAuthor` + `source`:
+
+```bash
+cd backend
+node scripts/downloadLibrary.js     # once: 32 public-domain classics from Project Gutenberg (~15 MB, git-ignored)
+node scripts/importLibrary.js       # add them (add --dry-run to preview, --refresh to re-write existing ones)
+python ../ml/export_catalogue.py    # optional: rebuild data/catalogue.json from the ML datasets
+```
+
+- **Classics** (Pride and Prejudice, Frankenstein, Dracula, ...) are full text, split into chapters; a few are priced so the purchase flow can be tried.
+- **Summary editions**: ~300 well-known books that are still in copyright, so only a plot summary is included (Wikipedia text via the CMU Book Summary Corpus, CC BY-SA 3.0), clearly labelled; genres come from BookConnect's own trained classifier.
+- Safe to re-run: a book that already exists (same title and original author) is skipped.
+
 ### Seeing the admin dashboard with data (optional)
 A demo script fills a separate database with 90 days of sample users, books and payments so the charts have something to show. It refuses to run unless the database name ends in `_demo`, and wipes that database first, so it can never touch real data:
 

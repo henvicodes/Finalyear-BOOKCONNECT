@@ -6,6 +6,7 @@ import WalletCard from "./WalletCard.jsx";
 import InterestTag from "./InterestTag.jsx";
 import { useBooks } from "../../hooks/useBooks.js";
 import "../../styles/ProfilePage.css";
+import { authorOf } from "../../utils/bookDisplay";
 
 // Wishlist cards
 const WishlistCard = ({ book }) => (
@@ -22,7 +23,7 @@ const WishlistCard = ({ book }) => (
       )}
     </div>
     <span className="wishlist-title">{book.title}</span>
-    <span className="wishlist-author">{book.author?.name || "Unknown"}</span>
+    <span className="wishlist-author">{authorOf(book) || "Unknown"}</span>
   </div>
 );
 
@@ -133,7 +134,7 @@ const ReaderProfileContent = ({ user }) => {
                 <div className="book-list-info">
                   <span className="book-list-title">{book.title}</span>
                   <span className="book-list-author">
-                    by {book.author?.name}
+                    by {authorOf(book)}
                   </span>
                   <span
                     className="book-list-meta"

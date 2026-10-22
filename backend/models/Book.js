@@ -62,6 +62,16 @@ const bookSchema = new mongoose.Schema(
       type: String,
       default: "default-cover.jpg",
     },
+    // For books BookConnect itself provides (public-domain classics, summary
+    // editions): the real author's name, and where the text came from. The
+    // `author` account is then just the library that holds the book.
+    originalAuthor: { type: String, trim: true, maxlength: 120 },
+    source: {
+      name: String,
+      url: String,
+      license: String,
+      note: String,
+    },
     contentFile: {
       type: String,
     },
