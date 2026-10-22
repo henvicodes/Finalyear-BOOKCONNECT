@@ -11,7 +11,8 @@ import ThemeToggle from "./ThemeToggle";
 import "../styles/Navbar.css";
 import { authorOf } from "../utils/bookDisplay";
 
-const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+import { API_URL } from "../config";
+const BASE_URL = API_URL;
 
 const GENRES = ["Fiction","Non-Fiction","Science","Technology","History","Poetry","Romance","Thriller"];
 const TYPES  = ["Free","Paid"];

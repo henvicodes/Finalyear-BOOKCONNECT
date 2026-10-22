@@ -11,7 +11,8 @@ import { compact, money } from "../components/admin/format";
 import "../styles/admin.css";
 import "../styles/adminViz.css";
 
-const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+import { API_URL } from "../config";
+const BASE_URL = API_URL;
 
 const when = (d) => (d ? new Date(d).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : "—");
 const errorOf = (err, fallback) => err.response?.data?.message || fallback;

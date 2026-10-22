@@ -2,7 +2,8 @@ import React, { useState } from "react";
 import axios from "axios";
 import { Lock, ShieldCheck, X, KeyRound, AlertCircle, CheckCircle } from "lucide-react";
 
-const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+import { API_URL } from "../config";
+const BASE_URL = API_URL;
 
 const WalletPinModal = ({ isOpen, onClose, onSuccess, token, title = "Enter 4-Digit Security PIN" }) => {
   const [pin, setPin] = useState("");

@@ -1,6 +1,7 @@
 import { io } from "socket.io-client";
 
-const SOCKET_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+import { API_URL } from "../config";
+const SOCKET_URL = API_URL;
 
 let socket = null;
 let socketUserId = null;
@@ -24,7 +25,7 @@ export const initSocket = () => {
 
   if (!socket) {
     socketUserId = userId;
-    socket = io(SOCKET_URL, {
+    socket = io(SOCKET_URL || undefined, {
       withCredentials: true,
       autoConnect: true,
       reconnection: true,

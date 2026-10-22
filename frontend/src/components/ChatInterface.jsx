@@ -22,7 +22,8 @@ import { initSocket, getSocket } from "../services/socket";
 import WalletPinModal from "./WalletPinModal";
 import { payOnChainIfLinked } from "../services/chainPayment";
 
-const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+import { API_URL } from "../config";
+const BASE_URL = API_URL;
 const AI_BOT_ID = "0000000000000000000000aa";
 
 const AI_BOT_USER = {

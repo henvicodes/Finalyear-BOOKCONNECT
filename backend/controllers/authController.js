@@ -15,6 +15,21 @@ const logOtpForDev = (email, otp, what) => {
   console.log("=========================================");
 };
 
+// When the code e-mail can't be sent: in development print the code so sign-up
+// can still be tested; in production tell the user honestly instead of letting
+// them wait for an email that will never arrive. Returns true if a response was sent.
+const emailFailed = (res, email, otp, what) => {
+  if (process.env.NODE_ENV === "production") {
+    res.status(502).json({
+      success: false,
+      message: "We could not send the verification email right now. Please try again in a few minutes.",
+    });
+    return true;
+  }
+  logOtpForDev(email, otp, what);
+  return false;
+};
+
 // Send OTP
 const sendRegistrationOTP = async (req, res) => {
   try {
@@ -71,7 +86,8 @@ const sendRegistrationOTP = async (req, res) => {
       await emailService.sendOTPEmail(email, name, otp);
       console.log("OTP email sent successfully");
     } catch (emailError) {
-      logOtpForDev(email, otp, "verification");
+      console.error("OTP email failed:", emailError.message);
+      if (emailFailed(res, email, otp, "verification")) return;
     }
 
     res.status(200).json({
@@ -238,7 +254,8 @@ const resendOTP = async (req, res) => {
     try {
       await emailService.sendOTPEmail(email, user.name, otp);
     } catch (emailError) {
-      logOtpForDev(email, otp, "verification (resend)");
+      console.error("OTP email failed:", emailError.message);
+      if (emailFailed(res, email, otp, "verification (resend)")) return;
     }
 
     res.status(200).json({

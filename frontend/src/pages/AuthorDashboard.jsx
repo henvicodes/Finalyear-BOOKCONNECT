@@ -20,7 +20,8 @@ import {
   CONTRACT_ADDRESS,
 } from "../services/manuscriptRegistry";
 
-const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+import { API_URL } from "../config";
+const BASE_URL = API_URL;
 
 // Format helper
 const fmt = (n) => n >= 1000 ? (n / 1000).toFixed(1) + "K" : String(n || 0);
