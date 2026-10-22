@@ -4,7 +4,7 @@ import {
   Routes,
   Route,
   Navigate,
-  useLocation
+  useLocation,
 } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import { ThemeProvider } from "./context/ThemeContext";
@@ -12,6 +12,8 @@ import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
 import PrivateRoute from "./components/PrivateRoute";
 import ErrorBoundary from "./components/ErrorBoundary";
+
+import PublicRoute from "./components/PublicRoute";
 
 // Pages
 import HomePage from "./pages/HomePage";
@@ -26,6 +28,7 @@ import EditBookPage from "./pages/EditBookPage";
 
 import ProfilePage from "./pages/Profile/ProfilePage.jsx";
 import EditProfilePage from "./pages/Profile/EditProfilePage.jsx";
+import AboutPage from "./pages/AboutPage.jsx";
 
 import PersonalizedRecommendationsPage from "./pages/Recommendations/PersonalizedRecommendationsPage.jsx";
 import ReaderWriterMatchingPage from "./pages/Recommendations/ReaderWriterMatchingPage.jsx";
@@ -48,8 +51,10 @@ const AppContent = () => {
         <Routes>
           {/* Public */}
           <Route path="/" element={<HomePage />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
+          <Route element={<PublicRoute />}>
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
+          </Route>
 
           {/* Protected */}
           <Route
@@ -102,6 +107,9 @@ const AppContent = () => {
               </PrivateRoute>
             }
           />
+
+          {/* About page */}
+          <Route path="/about" element={<AboutPage />} />
 
           {/* Books */}
           <Route path="/books" element={<BooksPage />} />

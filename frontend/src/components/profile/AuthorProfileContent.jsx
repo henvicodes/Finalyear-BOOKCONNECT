@@ -12,11 +12,9 @@ import {
 import StatBubble from "./StatBubble.jsx";
 import InterestTag from "./InterestTag.jsx";
 import WalletCard from "./WalletCard.jsx";
-import CollaborationCard from "./CollaborationCard";
 import { useMyBooks } from "../../hooks/useBooks.js";
 import "../../styles/ProfilePage.css";
 
-//  Updated BookRow with Edit button
 const BookRow = ({ book }) => {
   const navigate = useNavigate();
 
@@ -25,7 +23,7 @@ const BookRow = ({ book }) => {
   };
 
   const handleEditClick = (e) => {
-    e.stopPropagation(); // Prevent triggering the book click
+    e.stopPropagation();
     navigate(`/edit-book/${book._id}`);
   };
 
@@ -75,7 +73,6 @@ const BookRow = ({ book }) => {
   );
 };
 
-// Loading skeleton
 const BookSkeleton = () => (
   <div className="book-list-item" style={{ opacity: 0.5 }}>
     <div
@@ -104,11 +101,9 @@ const BookSkeleton = () => (
   </div>
 );
 
-//  Component
 const AuthorProfileContent = ({ user }) => {
   const { books, loading, error } = useMyBooks();
 
-  // Compute real stats from actual books
   const published = books.filter((b) => b.status === "published");
   const totalReads = books.reduce((s, b) => s + (b.totalReads || 0), 0);
   const ratedBooks = books.filter((b) => b.averageRating > 0);
@@ -123,7 +118,6 @@ const AuthorProfileContent = ({ user }) => {
 
   return (
     <>
-      {/* Real stats */}
       <div className="profile-stats-row">
         <StatBubble
           icon={<BookOpen size={20} />}
@@ -151,7 +145,6 @@ const AuthorProfileContent = ({ user }) => {
         />
       </div>
 
-      {/* Writing genres */}
       {user?.interests?.length > 0 && (
         <section className="profile-section">
           <h3 className="profile-section-title">
@@ -165,7 +158,6 @@ const AuthorProfileContent = ({ user }) => {
         </section>
       )}
 
-      {/* My books — real data with clickable books and edit button */}
       <section className="profile-section">
         <div className="section-header-row">
           <h3 className="profile-section-title">
@@ -203,20 +195,11 @@ const AuthorProfileContent = ({ user }) => {
         </div>
       </section>
 
-      {/* Blockchain wallet */}
       <section className="profile-section">
         <h3 className="profile-section-title">
           <Shield size={16} /> Blockchain Ownership
         </h3>
         <WalletCard user={user} />
-      </section>
-
-      {/* Collaboration */}
-      <section className="profile-section">
-        <h3 className="profile-section-title">
-          <Users size={16} /> Open to Collaboration
-        </h3>
-        <CollaborationCard />
       </section>
     </>
   );

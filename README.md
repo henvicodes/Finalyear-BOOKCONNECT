@@ -1,10 +1,79 @@
-# BookConnect
+# 📚 BookConnect: A Blockchain-Enabled AI-Driven Digital Publishing Platform
 
-A blockchain-enabled, AI-driven digital publishing platform connecting authors, publishers, and readers — with AI writing assistance, content recommendations, reader–writer matching, plagiarism detection, and Web3 wallet payments.
+BookConnect is an integrated, role-based digital publishing ecosystem designed to enable secure, intelligent, and community-driven knowledge exchange. It bridges the gap between authors, readers, and publishers by combining **Artificial Intelligence (AI)** with **Blockchain technology** to streamline publishing workflows, protect intellectual property, and deliver personalized reading experiences.
 
-MERN stack (MongoDB, Express, React, Node) + Socket.io for real-time chat + Web3/MetaMask for wallet payments + Claude/Google Gemini for AI features.
+> **Academic Context:** Developed as a B.Tech Major Project for the Department of Computer Science & Technology at Usha Mittal Institute of Technology, SNDT Women's University, Mumbai, during the academic year 2026–27.
 
-## Features
+---
+
+## ✨ Key Features
+
+### 🤖 Artificial Intelligence Integration
+
+- **AI Writing Assistant:** Provides real-time grammar, writing style, and readability suggestions to help authors improve their manuscripts.
+- **Plagiarism Detection:** Analyzes content similarity to help assess originality before publication.
+- **Automated Summaries:** Generates summaries, synopses, and promotional blurbs for manuscripts.
+- **Smart Book Recommendations:** Uses TF-IDF and cosine similarity to recommend relevant books based on reader interests.
+- **Author–Publisher Matchmaking:** Identifies potential publishing opportunities based on author profiles and genre similarities.
+- **Conversational AI Chatbot:** Assists users with platform navigation, frequently asked questions, and book discovery.
+
+### ⛓️ Blockchain and Security
+
+- **Digital Ownership Verification:** Generates SHA-256 hashes of manuscripts to create tamper-evident digital fingerprints.
+- **Web3 Integration:** Supports MetaMask wallet connectivity to associate blockchain identities with ownership verification.
+- **Immutable Ownership Records:** Records timestamped ownership information on a blockchain to support transparent verification of content integrity.
+
+### 👥 Multi-Role Ecosystem
+
+BookConnect provides dedicated functionality for four types of users:
+
+1. **Author:** Create and manage manuscripts, use AI-powered writing tools, register blockchain ownership, and submit manuscripts to publishers.
+2. **Reader:** Discover books, filter by genre, track reading progress, purchase premium content, submit reviews, and interact with the AI chatbot.
+3. **Publisher:** Review manuscript submissions, perform AI-assisted quality checks, negotiate publishing fees, and manage book catalogs.
+4. **Administrator:** Oversee platform operations, verify users, and manage book listings.
+
+### 💳 Secure Monetization
+
+- **Payment Gateway:** Supports payment processing for premium books and subscription-based services.
+- **PIN-Based Authorization:** Adds an additional security layer by requiring a four-digit PIN for wallet balance access and transaction approvals.
+
+---
+
+---
+
+## 🛠️ Technology Stack
+
+### Frontend
+
+- React.js with Vite
+- React Router DOM
+- Lucide React
+- Ethers.js / Web3.js for blockchain interactions
+
+### Backend
+
+- Node.js
+- Express.js
+- MongoDB with Mongoose
+- JSON Web Tokens (JWT) for authentication
+- Socket.IO for real-time messaging and notifications
+- Nodemailer for OTP verification and email services
+
+### Artificial Intelligence and NLP
+
+- Python and NLP libraries for text processing and similarity analysis
+- TF-IDF and cosine similarity for recommendations and matchmaking
+- External Large Language Model (LLM) APIs for chatbot and advanced writing assistance
+
+### Blockchain
+
+- Ethereum
+- Solidity for smart contract development
+- MetaMask for wallet connectivity and Web3 interactions
+
+---
+
+## 🧩 What is implemented
 
 - **Auth** — OTP email verification, JWT sessions, role-based access (reader / author / publisher)
 - **Publishing pipeline** — authors upload manuscripts → submit to a publisher → publisher proposes a fee → author pays from their wallet → book goes live, chapter by chapter
@@ -47,14 +116,18 @@ Both contracts' source is in [`blockchain/contracts/`](blockchain/contracts), wi
 - Rate limiting on login / OTP / wallet routes, `helmet` headers, a sanitizer that strips MongoDB operators from input, 7-day JWTs, and no internal error text sent to the browser
 - Known limits: the "quality score" is a readability formula, not AI; sessions last 7 days with no refresh-token rotation; standalone MongoDB has no multi-document transactions, so atomicity relies on guarded updates and compensation
 
-## Project structure
+---
+
+## 🗂️ Project structure
 
 ```
 backend/    Express API, MongoDB models, Socket.io server
 frontend/   React (Vite) app
 ```
 
-## Setup
+---
+
+## 🚀 Getting Started
 
 ### Prerequisites
 - Node.js 18+
@@ -127,7 +200,9 @@ node seed.js
 
 Populates the database with demo users, books, and chapters. Check `backend/seed.js` for the seeded account credentials.
 
-## Testing
+---
+
+## 🧪 Testing
 
 ```bash
 cd backend
@@ -136,14 +211,39 @@ npm test
 
 See [`backend/tests`](backend/tests) for coverage of auth, the publishing workflow, purchases, the genre classifier, and security (OTP/PIN lockouts, atomic payments, on-chain verification with a mocked chain, ownership checks, authenticated sockets).
 
-## Tech stack
+---
 
-| Layer | Technology |
-|---|---|
-| Frontend | React 19, React Router, Vite, Axios |
-| Backend | Node.js, Express 5, Socket.io |
-| Database | MongoDB (Mongoose) |
-| Auth | JWT, bcrypt, email OTP |
-| AI | Claude or Google Gemini API (both optional), plain-JS TF-IDF/cosine similarity for recommendations/matching/plagiarism |
-| Translation | Claude (optional) → Google Gemini (optional) → the free MyMemory API |
-| Web3 | MetaMask (`window.ethereum`) for wallet connect and transfers |
+## 🔮 Future Scope
+
+- **Advanced AI Plagiarism Detection:** Incorporate semantic similarity analysis and larger reference datasets to improve contextual matching.
+- **Real-Time Collaborative Editing:** Enable multiple authors to collaborate on manuscripts simultaneously.
+- **Scalable Blockchain Infrastructure:** Explore Layer-2 blockchain networks to improve transaction throughput and reduce gas fees.
+- **Enhanced Personalization:** Improve book discovery using reading history, preferences, and engagement patterns.
+- **Expanded Publishing Ecosystem:** Introduce author analytics, publisher performance tracking, and reader engagement tools.
+
+---
+
+## 👥 The Team
+
+| Team Member     | Roll Number |
+| --------------- | ----------: |
+| Arpita Gupta    |          22 |
+| Alfiya Inamdar  |          25 |
+| Sarika Mahalnar |          43 |
+| Henvi Patel     |          53 |
+
+**Project Guide:** Dr. Sumedh Pundkar
+
+**Institution:** Usha Mittal Institute of Technology, SNDT Women's University, Mumbai, India.
+
+---
+
+## 📄 License
+
+This project was developed for academic purposes as part of the B.Tech Major Project for the academic year 2026–27.
+
+**Copyright © 2026 BookConnect. All rights reserved.**
+
+---
+
+_BookConnect — Empowering authors, connecting readers, and transforming digital publishing through AI and blockchain technology._
