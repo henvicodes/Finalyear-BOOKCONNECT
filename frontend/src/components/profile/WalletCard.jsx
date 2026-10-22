@@ -13,7 +13,7 @@ import {
   ExternalLink,
   ShieldAlert
 } from "lucide-react";
-import { connectMetaMask, isMetaMaskInstalled } from "../../services/web3";
+import { connectMetaMask, waitForEthereum } from "../../services/web3";
 import { makePaymentOnChain } from "../../services/paymentLedger";
 import { useAuth } from "../../context/AuthContext";
 import WalletPinModal from "../WalletPinModal";
@@ -55,11 +55,12 @@ const WalletCard = ({ user }) => {
     setWalletAddress(user?.blockchainWallet?.address || "");
     setIsLinked(user?.blockchainWallet?.isLinked || false);
 
-    if (!isMetaMaskInstalled()) {
-      setMetamaskInstalled(false);
-    } else {
-      setMetamaskInstalled(true);
-    }
+    // The extension injects itself a moment after the page loads, so wait for it
+    // instead of checking once (which wrongly said "not installed").
+    let alive = true;
+    waitForEthereum(2500).then((provider) => {
+      if (alive) setMetamaskInstalled(Boolean(provider));
+    });
 
     // Deliberately not auto-filling from `eth_accounts` here: MetaMask
     // grants site permission per browser/origin, not per app account, so
@@ -68,6 +69,9 @@ const WalletCard = ({ user }) => {
     // would be misleading (and confusing when testing multiple accounts
     // in one browser). The explicit "Connect MetaMask" button is the only
     // path that actually links a wallet to this user.
+    return () => {
+      alive = false;
+    };
   }, [user]);
 
   // Handle MetaMask connection
@@ -296,26 +300,6 @@ const WalletCard = ({ user }) => {
               <CheckCircle size={18} />
               <span>Verified</span>
             </div>
-          ) : !metamaskInstalled ? (
-            <a
-              href="https://metamask.io/download/"
-              target="_blank"
-              rel="noreferrer"
-              style={{
-                padding: "8px 14px",
-                background: "#f6851b",
-                color: "#fff",
-                borderRadius: 10,
-                fontWeight: "bold",
-                fontSize: 12,
-                textDecoration: "none",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 6
-              }}
-            >
-              🦊 Install MetaMask
-            </a>
           ) : (
             <button
               onClick={handleConnectMetaMask}
@@ -341,6 +325,17 @@ const WalletCard = ({ user }) => {
                 <><span>🦊</span><span>Connect MetaMask</span></>
               )}
             </button>
+          )}
+          {!isLinked && !metamaskInstalled && (
+            <a
+              href="https://metamask.io/download/"
+              target="_blank"
+              rel="noreferrer"
+              style={{ fontSize: 11, color: "#f6851b", fontWeight: 600, textDecoration: "underline" }}
+              title="MetaMask was not detected in this browser"
+            >
+              Get MetaMask
+            </a>
           )}
 
           {/* Transaction History Button */}

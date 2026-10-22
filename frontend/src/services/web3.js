@@ -1,31 +1,48 @@
+// If several wallet extensions are installed they can fight over window.ethereum.
+// Some expose a list in `providers`; prefer the MetaMask one.
+const pickProvider = () => {
+  if (typeof window === "undefined" || !window.ethereum) return null;
+  const list = window.ethereum.providers;
+  if (Array.isArray(list)) {
+    return list.find((p) => p.isMetaMask) || list[0];
+  }
+  return window.ethereum;
+};
+
 /**
- * Wait up to 3 seconds for MetaMask to inject window.ethereum
- * (MetaMask injects asynchronously on page load)
+ * Wait for MetaMask to inject window.ethereum. Extensions add it a moment AFTER
+ * the page loads, so checking once at startup wrongly reports "not installed".
+ * Resolves as soon as it appears (or on MetaMask's own "ethereum#initialized"
+ * event), and gives up with null after `timeoutMs`.
  */
 export const waitForEthereum = (timeoutMs = 3000) => {
   return new Promise((resolve) => {
-    if (window.ethereum) {
-      resolve(window.ethereum);
+    const now = pickProvider();
+    if (now) {
+      resolve(now);
       return;
     }
 
-    const interval = setInterval(() => {
-      if (window.ethereum) {
-        clearInterval(interval);
-        resolve(window.ethereum);
-      }
-    }, 100);
-
-    setTimeout(() => {
+    let done = false;
+    const finish = (value) => {
+      if (done) return;
+      done = true;
       clearInterval(interval);
-      resolve(null);
-    }, timeoutMs);
+      clearTimeout(timer);
+      window.removeEventListener("ethereum#initialized", onInit);
+      resolve(value);
+    };
+    const onInit = () => finish(pickProvider());
+    const interval = setInterval(() => {
+      const found = pickProvider();
+      if (found) finish(found);
+    }, 100);
+    const timer = setTimeout(() => finish(pickProvider()), timeoutMs);
+    window.addEventListener("ethereum#initialized", onInit, { once: true });
   });
 };
 
-export const isMetaMaskInstalled = () => {
-  return typeof window !== "undefined" && Boolean(window.ethereum);
-};
+export const isMetaMaskInstalled = () => Boolean(pickProvider());
 
 export const SEPOLIA_CHAIN_ID = "0xaa36a7"; // 11155111 in hex
 

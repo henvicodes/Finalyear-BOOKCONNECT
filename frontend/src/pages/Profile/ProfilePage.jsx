@@ -62,7 +62,17 @@ const ProfilePage = () => {
     : "Jan 2026";
 
   // Show the best available profile data
-  const displayUser = { ...user, ...profile };
+  // `profile` is a copy fetched when the page opened, so it goes stale as soon as the
+  // user does something here (links a wallet, sends money). For those fields the live
+  // `user` must win, otherwise linking MetaMask "un-links" itself on screen.
+  const linkedWallet = user?.blockchainWallet?.isLinked ? user.blockchainWallet : profile?.blockchainWallet;
+  const displayUser = {
+    ...user,
+    ...profile,
+    blockchainWallet: linkedWallet || user?.blockchainWallet,
+    walletAddress: user?.walletAddress || profile?.walletAddress,
+    walletBalance: user?.walletBalance ?? profile?.walletBalance,
+  };
 
   return (
     <div className="profile-page">

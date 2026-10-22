@@ -12,7 +12,7 @@ import HelpTip from "../components/HelpTip";
 import ChapterManager from "../components/books/ChapterManager";
 import confetti from "canvas-confetti";
 import { useAuth } from "../context/AuthContext";
-import { connectMetaMask, getConnectedAccount, isMetaMaskInstalled } from "../services/web3";
+import { connectMetaMask, getConnectedAccount, waitForEthereum } from "../services/web3";
 import {
   registerManuscriptOnChain,
   updateManuscriptOnChain,
@@ -1187,8 +1187,8 @@ export const AuthorBlockchain = ({ token, books, user, fetchBooks }) => {
         setWalletConnected(true);
       }
 
-      // Check if MetaMask extension is installed
-      if (!isMetaMaskInstalled()) {
+      // Check if MetaMask extension is installed (it injects itself a moment after load)
+      if (!(await waitForEthereum(2500))) {
         setMetamaskDetected(false);
         return;
       }
