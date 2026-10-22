@@ -4,6 +4,7 @@ const Message = require("../models/Message");
 const User = require("../models/User");
 const { protect } = require("../middleware/authMiddleware");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
+const Anthropic = require("@anthropic-ai/sdk");
 
 // Virtual AI Bot ID for seamless AI Assistant Chat
 const AI_BOT_ID = "0000000000000000000000aa";
@@ -108,14 +109,17 @@ router.get("/:userId", protect, async (req, res) => {
         deletedBy: { $ne: currentUserId }
       }).sort("createdAt");
 
-      // Map to include AI user info
-      const formatted = aiMessages.map(m => ({
-        ...m.toObject(),
-        content: m.deletedForEveryone ? "This message was deleted" : m.content,
-        sender: m.sender.toString() === currentUserId.toString() && !m.isSystem && m.content.startsWith("[AI Response]:") === false
-          ? { _id: currentUserId, name: req.user.name, role: req.user.role }
-          : AI_BOT_USER
-      }));
+      // Who wrote each message: the flag when present. Messages saved before the flag
+      // existed were stored as question, answer, question, answer... so those alternate.
+      let legacyIndex = 0;
+      const formatted = aiMessages.map(m => {
+        const fromAi = typeof m.fromAi === "boolean" ? m.fromAi : legacyIndex++ % 2 === 1;
+        return {
+          ...m.toObject(),
+          content: m.deletedForEveryone ? "This message was deleted" : m.content,
+          sender: fromAi ? AI_BOT_USER : { _id: currentUserId, name: req.user.name, role: req.user.role },
+        };
+      });
 
       return res.json({ success: true, data: formatted });
     }
@@ -190,57 +194,121 @@ router.post("/", protect, async (req, res) => {
 });
 
 // Helper: AI Chatbot message handler
+const ASSISTANT_PROMPT = (name, role) => `You are the BookConnect AI Assistant inside a digital publishing app.
+BookConnect lets authors write and publish books, publishers review manuscripts and make offers (or decline them),
+readers buy and read books, and everyone has an in-app wallet protected by a 4-digit PIN (MetaMask / Sepolia testnet is optional).
+The user is ${name}, a ${role}. Be friendly, concrete and brief (under 120 words). Help with writing, publishing, reading
+and how to use BookConnect. If you don't know something about the app, say so rather than guessing.`;
+
+// Answers used when no AI key is configured: plain keyword rules, matched on whole words.
+// Short words must match whole ("hi" must not match "history"); longer ones match as a word start ("thank" -> "thanks").
+const has = (text, ...words) => words.some((w) => new RegExp(`\\b${w}${w.length <= 3 ? "\\b" : ""}`, "i").test(text));
+function builtInAnswer(content, user) {
+  const t = content.trim();
+  if (has(t, "thank")) return "You're welcome! Ask me anything else about BookConnect.";
+  if (has(t, "how are you", "how r u", "how do you do")) {
+    return `I'm doing well, thanks ${user.name}! I'm running in basic mode right now (no AI key is set up), so I can answer questions about how BookConnect works. What would you like to know?`;
+  }
+  if (has(t, "hello", "hi", "hey", "good morning", "good evening")) {
+    return `Hello ${user.name}! I'm the BookConnect assistant. Ask me about publishing a book, offers and fees, your wallet and PIN, or reading and buying books.`;
+  }
+  if (has(t, "decline", "reject", "offer", "publisher", "publishing fee", "fee", "cost")) {
+    return "When you send a manuscript, the publisher reads it and either sends an offer (a publishing fee) or declines it. If you accept an offer you pay the fee from your wallet with your PIN and the book goes live. If it's declined, you can edit it and send it to another publisher.";
+  }
+  if (has(t, "upload", "manuscript", "write", "chapter", "draft")) {
+    return "Authors can write chapters in the Author Dashboard (Upload Book or My Books > Edit), run the readability and similarity check, then either publish directly or submit the manuscript to a publisher.";
+  }
+  if (has(t, "wallet", "pin", "balance", "money", "pay", "buy", "purchase")) {
+    return "Your wallet balance is hidden until you click the eye and enter your 4-digit PIN. The PIN is also needed for every payment. If you forget it, use 'Forgot or reset PIN' and confirm with your account password.";
+  }
+  if (has(t, "metamask", "blockchain", "crypto", "sepolia", "web3", "ethereum")) {
+    return "MetaMask is optional. Link it from your Profile > Wallet to record payments on the Sepolia test blockchain, and authors can register a manuscript's fingerprint on-chain. Payments stay inside BookConnect if either person hasn't linked a wallet.";
+  }
+  if (has(t, "verify", "verification", "verified", "badge")) {
+    return "Publishers can ask to be verified from the Verification tab: send your company name, a registration number (CIN, GSTIN, Udyam or an ISBN) and a document link. An admin checks it and adds a Verified badge that authors see.";
+  }
+  if (has(t, "translate", "translation", "language")) {
+    return "While reading you can translate a chapter into another language with the Translate button. If the free translation limit is used up, an admin needs to add a Claude API key.";
+  }
+  if (has(t, "recommend", "suggest", "what should i read", "genre")) {
+    return "The Matchmaker and Recommendations pages suggest books from your reading history, ratings and readers with similar taste. Rate a few books to make them better.";
+  }
+  if (has(t, "help", "what can you do", "feature")) {
+    return "I can explain how to publish a book, how offers and fees work, how your wallet, PIN and MetaMask work, how verification works, and how to read, rate and translate books.";
+  }
+  return `I'm in basic mode (no AI key is set up), so I can only answer questions about using BookConnect, such as publishing, offers and fees, your wallet and PIN, MetaMask, verification, reading and translating. I couldn't match "${t.slice(0, 80)}". Try asking about one of those.`;
+}
+
 async function handleAiMessage(req, res) {
   try {
-    const { content } = req.body;
+    const content = typeof req.body.content === "string" ? req.body.content.trim().slice(0, 2000) : "";
+    if (!content) {
+      return res.status(400).json({ success: false, message: "Write a message first." });
+    }
     const userId = req.user._id;
+
+    // recent turns, so a follow-up question makes sense
+    const recent = await Message.find({ sender: userId, receiver: userId, isAi: true, deletedBy: { $ne: userId } })
+      .sort("-createdAt")
+      .limit(8)
+      .select("content fromAi");
 
     // 1. Save user prompt
     const userMsg = await Message.create({
       sender: userId,
       receiver: userId,
       content,
-      isAi: true
+      isAi: true,
+      fromAi: false,
     });
 
     userMsg.sender = { _id: userId, name: req.user.name, role: req.user.role };
     userMsg.receiver = AI_BOT_USER;
 
-    // 2. Generate AI response
+    // 2. Generate AI response: Claude, then Gemini, then the built-in answers
     let aiText = "";
-    if (process.env.GEMINI_API_KEY) {
+    if (process.env.CLAUDE_API_KEY) {
+      try {
+        const history = recent.reverse().filter((m) => typeof m.fromAi === "boolean")
+          .map((m) => ({ role: m.fromAi ? "assistant" : "user", content: m.content }));
+        // the API needs the conversation to start with the user and alternate
+        const turns = [];
+        for (const h of [...history, { role: "user", content }]) {
+          if (turns.length === 0 && h.role !== "user") continue;
+          if (turns.length && turns[turns.length - 1].role === h.role) turns[turns.length - 1].content += `\n${h.content}`;
+          else turns.push(h);
+        }
+        const anthropic = new Anthropic({ apiKey: process.env.CLAUDE_API_KEY });
+        const reply = await anthropic.messages.create({
+          model: "claude-3-5-haiku-latest",
+          max_tokens: 400,
+          system: ASSISTANT_PROMPT(req.user.name, req.user.role),
+          messages: turns,
+        });
+        aiText = reply.content.filter((b) => b.type === "text").map((b) => b.text).join("").trim();
+      } catch (claudeErr) {
+        console.error("Claude chat error:", claudeErr.message);
+      }
+    }
+    if (!aiText && process.env.GEMINI_API_KEY) {
       try {
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
         const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-        const result = await model.generateContent(
-          `You are BookConnect AI Assistant. Help the user with writing, publishing, manuscript reviews, or platform questions. User query: "${content}"`
-        );
+        const result = await model.generateContent(`${ASSISTANT_PROMPT(req.user.name, req.user.role)}\n\nUser: ${content}`);
         aiText = result.response.text();
       } catch (geminiErr) {
-        console.error("Gemini AI Chat error:", geminiErr);
+        console.error("Gemini AI Chat error:", geminiErr.message);
       }
     }
-
-    if (!aiText) {
-      // Offline fallback AI response
-      const lower = content.toLowerCase();
-      if (lower.includes("publish") || lower.includes("cost") || lower.includes("fee")) {
-        aiText = "Publishers on BookConnect review your uploaded manuscripts and propose publishing costs via direct chat. Once agreed, authors can fulfill the fee securely via Web3 escrow.";
-      } else if (lower.includes("manuscript") || lower.includes("upload") || lower.includes("book")) {
-        aiText = "You can upload new manuscripts from your Author Dashboard. Our system automatically runs AI readability checks and plagiarism scans on your content!";
-      } else if (lower.includes("hello") || lower.includes("hi") || lower.includes("hey")) {
-        aiText = `Hello ${req.user.name}! I am your BookConnect AI Assistant. How can I assist you with your books, manuscripts, or publishing today?`;
-      } else {
-        aiText = `Thank you for reaching out! Regarding "${content}": BookConnect offers AI quality analysis, manuscript negotiation with publishers, and reader recommendations. Let me know if you need specific help!`;
-      }
-    }
+    if (!aiText) aiText = builtInAnswer(content, req.user);
 
     // 3. Save AI response message
     const aiMsg = await Message.create({
       sender: userId,
       receiver: userId,
       content: aiText,
-      isAi: true
+      isAi: true,
+      fromAi: true,
     });
 
     aiMsg.sender = AI_BOT_USER;
