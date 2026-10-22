@@ -1,0 +1,136 @@
+/* Help & Guide, welcome banner and "?" tips. Uses the design tokens only, so
+   it follows light/dark mode automatically. */
+
+/* ── "?" tip ─────────────────────────────────────────────────────────── */
+.help-tip {
+  position: relative;
+  display: inline-flex;
+  vertical-align: middle;
+  margin-left: 6px;
+}
+.help-tip-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border: none;
+  background: none;
+  border-radius: 50%;
+  color: var(--text-muted);
+  cursor: help;
+  line-height: 0;
+}
+.help-tip-btn:hover,
+.help-tip-btn:focus-visible { color: var(--accent-600); }
+.help-tip-btn:focus-visible { outline: 2px solid var(--accent-500); outline-offset: 1px; }
+
+.help-tip-pop {
+  display: none;
+  position: fixed;          /* positioned by HelpTip.jsx so it is never clipped */
+  top: 0;
+  left: 0;
+  z-index: 3000;
+  width: 260px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-medium);
+  border-radius: 10px;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  box-shadow: var(--shadow-lg);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
+  text-align: left;
+  text-transform: none;
+  letter-spacing: normal;
+  white-space: normal;
+}
+.help-tip-pop strong { display: block; margin-bottom: 2px; color: var(--text-primary); font-size: 12px; }
+.help-tip:hover .help-tip-pop,
+.help-tip:focus-within .help-tip-pop { display: block; }
+
+/* ── Welcome banner ──────────────────────────────────────────────────── */
+.welcome-banner {
+  position: relative;
+  margin: 0 0 20px;
+  padding: 18px 20px;
+  border: 1px solid var(--accent-200);
+  border-radius: 14px;
+  background: var(--accent-50);
+  color: var(--text-secondary);
+}
+.welcome-banner-head { display: flex; align-items: center; gap: 8px; color: var(--accent-700); margin-bottom: 8px; padding-right: 28px; }
+.welcome-banner-steps { margin: 0 0 14px 20px; padding: 0; font-size: 13px; line-height: 1.7; }
+.welcome-banner-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.welcome-banner-primary,
+.welcome-banner-secondary {
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.welcome-banner-primary { border: none; background: var(--accent-500); color: #fff; }
+.welcome-banner-primary:hover { background: var(--accent-600); }
+.welcome-banner-secondary { border: 1px solid var(--border-medium); background: var(--bg-primary); color: var(--text-secondary); }
+.welcome-banner-close {
+  position: absolute; top: 10px; right: 10px;
+  border: none; background: none; cursor: pointer; color: var(--text-muted); padding: 4px; line-height: 0; border-radius: 6px;
+}
+.welcome-banner-close:hover { color: var(--text-primary); }
+
+/* ── Guide page ──────────────────────────────────────────────────────── */
+.help-guide .help-section { margin-bottom: 28px; }
+.help-guide h2 { font-size: 15px; font-weight: 700; color: var(--text-primary); margin: 0 0 12px; }
+
+.help-journey { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+.help-journey li {
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 12px 14px; border: 1px solid var(--border-light); border-radius: 12px;
+  background: var(--bg-primary); font-size: 13px; color: var(--text-secondary); line-height: 1.45;
+}
+.help-journey-num {
+  flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--accent-100); color: var(--accent-700); font-size: 12px; font-weight: 700;
+}
+
+.help-search {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 20px;
+  padding: 0 12px; height: 44px; border: 1px solid var(--border-medium); border-radius: 12px;
+  background: var(--bg-primary); color: var(--text-muted);
+}
+.help-search:focus-within { border-color: var(--accent-500); box-shadow: var(--shadow-focus); }
+.help-search input { flex: 1; border: none; outline: none; background: transparent; color: var(--text-primary); font-size: 14px; min-width: 0; }
+
+.help-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+.help-card {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 16px; border: 1px solid var(--border-light); border-radius: 14px; background: var(--bg-primary);
+}
+.help-card-head { display: flex; align-items: center; gap: 10px; }
+.help-card-head h3 { margin: 0; font-size: 14px; font-weight: 700; color: var(--text-primary); }
+.help-card-icon {
+  flex-shrink: 0; width: 32px; height: 32px; border-radius: 9px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--accent-50); color: var(--accent-600);
+}
+.help-card p { margin: 0; font-size: 13px; line-height: 1.55; color: var(--text-secondary); flex: 1; }
+.help-card-where {
+  display: inline-flex; align-items: center; gap: 4px; align-self: flex-start;
+  padding: 3px 9px; border-radius: 999px; background: var(--bg-tertiary);
+  font-size: 11px; font-weight: 600; color: var(--text-secondary);
+}
+.help-card-go {
+  display: inline-flex; align-items: center; gap: 6px; align-self: flex-start;
+  padding: 0; border: none; background: none; cursor: pointer;
+  font-size: 13px; font-weight: 600; color: var(--accent-600);
+}
+.help-card-go:hover { color: var(--accent-700); text-decoration: underline; }
+
+.help-glossary { display: flex; flex-direction: column; gap: 8px; max-width: 760px; }
+.help-glossary details { border: 1px solid var(--border-light); border-radius: 10px; background: var(--bg-primary); }
+.help-glossary summary { padding: 12px 14px; cursor: pointer; font-size: 14px; font-weight: 600; color: var(--text-primary); }
+.help-glossary details[open] summary { border-bottom: 1px solid var(--border-light); }
+.help-glossary details p { margin: 0; padding: 12px 14px; font-size: 13px; line-height: 1.6; color: var(--text-secondary); }
+.help-empty { font-size: 13px; color: var(--text-muted); }

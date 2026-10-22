@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
-import { BookOpen, Star, Search } from "lucide-react";
+import { BookOpen, Search } from "lucide-react";
 import api from "../utils/api";
+import BookCard from "../components/books/BookCard";
 import "../styles/BooksPage.css";
 
 const BooksPage = () => {
@@ -10,6 +10,7 @@ const BooksPage = () => {
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedGenre, setSelectedGenre] = useState("");
+  const [sortBy, setSortBy] = useState("ranked");
   const [pagination, setPagination] = useState({
     page: 1,
     pages: 1,
@@ -36,7 +37,7 @@ const BooksPage = () => {
 
   useEffect(() => {
     fetchBooks();
-  }, [pagination.page, selectedGenre, searchTerm]);
+  }, [pagination.page, selectedGenre, searchTerm, sortBy]);
 
   const fetchBooks = async () => {
     setLoading(true);
@@ -46,6 +47,7 @@ const BooksPage = () => {
         status: "published",
         page: pagination.page,
         limit: 12,
+        sort: sortBy,
       });
 
       if (selectedGenre && selectedGenre !== "all") {
@@ -88,6 +90,7 @@ const BooksPage = () => {
       <div className="container">
         <h1 className="books-page-title">All Books</h1>
 
+        {/* Search and Filters */}
         <div className="books-filters">
           <form onSubmit={handleSearch} className="search-form">
             <div className="search-input-wrapper">
@@ -118,8 +121,23 @@ const BooksPage = () => {
               </button>
             ))}
           </div>
+
+          <div className="sort-control">
+            <label htmlFor="books-sort">Sort by</label>
+            <select
+              id="books-sort"
+              value={sortBy}
+              onChange={(e) => { setSortBy(e.target.value); setPagination({ ...pagination, page: 1 }); }}
+            >
+              <option value="ranked">Top Ranked</option>
+              <option value="-createdAt">Newest</option>
+              <option value="-averageRating">Highest Rated</option>
+              <option value="-totalReads">Most Read</option>
+            </select>
+          </div>
         </div>
 
+        {/* Books Grid */}
         {loading ? (
           <div className="books-loading">
             <div className="loading-spinner"></div>
@@ -142,42 +160,11 @@ const BooksPage = () => {
           <>
             <div className="books-grid">
               {books.map((book) => (
-                <Link
-                  to={`/books/${book._id}`}
-                  key={book._id}
-                  className="book-card"
-                >
-                  <div className="book-card-cover">
-                    {book.coverImage &&
-                    book.coverImage !== "default-cover.jpg" ? (
-                      <img src={book.coverImage} alt={book.title} />
-                    ) : (
-                      <div className="book-card-cover-placeholder">
-                        <BookOpen size={24} />
-                      </div>
-                    )}
-                  </div>
-                  <div className="book-card-info">
-                    <h3 className="book-card-title">{book.title}</h3>
-                    <p className="book-card-author">
-                      {book.author?.name || "Unknown"}
-                    </p>
-                    <div className="book-card-footer">
-                      {book.averageRating > 0 ? (
-                        <span className="book-card-rating">
-                          <Star size={12} className="star-filled" />
-                          {book.averageRating}
-                        </span>
-                      ) : (
-                        <span className="book-card-no-rating">New</span>
-                      )}
-                      <span className="book-card-genre">{book.genre}</span>
-                    </div>
-                  </div>
-                </Link>
+                <BookCard key={book._id} book={book} />
               ))}
             </div>
 
+            {/* Pagination */}
             {pagination.pages > 1 && (
               <div className="pagination">
                 <button

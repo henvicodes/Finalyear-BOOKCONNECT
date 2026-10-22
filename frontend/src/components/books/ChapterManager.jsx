@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { BookOpen } from "lucide-react";
 import api from "../../utils/api";
 import "../../styles/ChapterManager.css";
 
@@ -82,13 +83,6 @@ const ChapterManager = ({ bookId, chapters, onChapterUpdate }) => {
     });
     setShowForm(true);
     setError("");
-  };
-
-  const handleReorder = async (chapterId, newOrder) => {
-    const chapter = chapters.find((c) => c._id === chapterId);
-    if (chapter) {
-      await handleSubmitEdit(chapterId, { ...chapter, order: newOrder });
-    }
   };
 
   return (

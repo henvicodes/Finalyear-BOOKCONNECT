@@ -1,10 +1,12 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { BookOpen, Users, Star, Award, Clock, BookMarked } from "lucide-react";
+import { BookOpen, Users, Star, Award, Clock, BookMarked, Shield } from "lucide-react";
 import StatBubble from "./StatBubble.jsx";
+import WalletCard from "./WalletCard.jsx";
 import InterestTag from "./InterestTag.jsx";
 import { useBooks } from "../../hooks/useBooks.js";
 import "../../styles/ProfilePage.css";
+import { authorOf } from "../../utils/bookDisplay";
 
 // Wishlist cards
 const WishlistCard = ({ book }) => (
@@ -21,7 +23,7 @@ const WishlistCard = ({ book }) => (
       )}
     </div>
     <span className="wishlist-title">{book.title}</span>
-    <span className="wishlist-author">{book.author?.name || "Unknown"}</span>
+    <span className="wishlist-author">{authorOf(book) || "Unknown"}</span>
   </div>
 );
 
@@ -132,7 +134,7 @@ const ReaderProfileContent = ({ user }) => {
                 <div className="book-list-info">
                   <span className="book-list-title">{book.title}</span>
                   <span className="book-list-author">
-                    by {book.author?.name}
+                    by {authorOf(book)}
                   </span>
                   <span
                     className="book-list-meta"
@@ -174,8 +176,17 @@ const ReaderProfileContent = ({ user }) => {
           <AddWishlistCard />
         </div>
       </section>
+      {/* Wallet — readers and publishers can link MetaMask too, so payments
+          to/from them can be recorded on-chain */}
+      <section className="profile-section">
+        <h3 className="profile-section-title">
+          <Shield size={16} /> Wallet &amp; Payments
+        </h3>
+        <WalletCard user={user} />
+      </section>
     </>
   );
 };
+
 
 export default ReaderProfileContent;

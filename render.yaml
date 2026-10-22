@@ -1,0 +1,48 @@
+# Render "Blueprint": tells Render how to build and run BookConnect.
+# One web service serves the API, Socket.io AND the built React site, so the
+# whole app lives at a single address. See DEPLOY.md for the full walkthrough.
+services:
+  - type: web
+    name: bookconnect
+    runtime: node
+    plan: free
+    # --include=dev because the frontend needs Vite to build, and Render sets
+    # NODE_ENV=production, which would otherwise skip dev dependencies.
+    buildCommand: npm --prefix frontend ci --include=dev && npm --prefix frontend run build && npm --prefix backend ci
+    startCommand: npm --prefix backend start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: 22
+      # Render passes the visitor's address through its load balancer.
+      - key: TRUST_PROXY
+        value: 1
+      - key: JWT_SECRET
+        generateValue: true
+
+      # ---- fill these in on the Render dashboard (they are secrets) ----
+      - key: MONGO_URI
+        sync: false
+      - key: SEPOLIA_RPC_URL
+        sync: false
+      - key: PAYMENT_LEDGER_ADDRESS
+        value: "0x9b08f1bE6f85aD6a1ea149800451f9A6e12371bF"
+      - key: MANUSCRIPT_REGISTRY_ADDRESS
+        value: "0x2a9Cb39CE35c94165403037616fa9c744f08b9aF"
+      # Used when the website is built (public contract addresses).
+      - key: VITE_PAYMENT_LEDGER_ADDRESS
+        value: "0x9b08f1bE6f85aD6a1ea149800451f9A6e12371bF"
+      - key: VITE_CONTRACT_ADDRESS
+        value: "0x2a9Cb39CE35c94165403037616fa9c744f08b9aF"
+      # Verification e-mails (Render's free plan blocks normal SMTP, so use Brevo's web API).
+      - key: BREVO_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      # Optional: AI translation / open-ended AI chat.
+      - key: CLAUDE_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false

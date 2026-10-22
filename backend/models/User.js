@@ -70,18 +70,43 @@ const userSchema = new mongoose.Schema(
         ref: "Book",
       },
     ],
+    // Publisher identity check. A publisher submits evidence; an admin reviews it
+    // and approves/rejects. `isVerified` is only ever set by an admin approval.
     publisherVerification: {
+      status: {
+        type: String,
+        enum: ["none", "pending", "approved", "rejected"],
+        default: "none",
+      },
       isVerified: {
         type: Boolean,
         default: false,
       },
+      companyName: { type: String, trim: true, maxlength: 120 },
+      websiteUrl: { type: String, trim: true, maxlength: 300 },
+      registrationType: {
+        type: String,
+        enum: ["CIN", "LLPIN", "GSTIN", "UDYAM", "ISBN_PREFIX", "OTHER"],
+      },
+      registrationNumber: { type: String, trim: true, maxlength: 60 },
+      isbnPrefix: { type: String, trim: true, maxlength: 20 },
       documentLink: {
         type: String,
       },
+      notes: { type: String, maxlength: 1000 },
+      submittedAt: Date,
+      reviewedAt: Date,
+      reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      rejectionReason: { type: String, maxlength: 500 },
+      // SHA-256 fingerprint of the approved details (tamper-evident record).
       blockchainHash: {
         type: String,
       },
     },
+    // Admin moderation: a suspended account can't log in or use existing sessions.
+    isSuspended: { type: Boolean, default: false },
+    suspendedReason: { type: String, maxlength: 300 },
+    suspendedAt: Date,
     earnings: {
       type: Number,
       default: 0,
@@ -90,16 +115,24 @@ const userSchema = new mongoose.Schema(
       type: Number,
       default: 1000,
     },
+    // bcrypt hash of the 4-digit wallet PIN (never the PIN itself). Older
+    // accounts may still hold a plain PIN — utils/pin.js upgrades it to a
+    // hash the next time it is verified.
     walletPin: {
       type: String,
       default: null,
+      select: false,
     },
+    pinFailedAttempts: { type: Number, default: 0 },
+    pinLockedUntil: { type: Date, default: null },
     walletAddress: {
       type: String,
       default: "",
     },
     resetPasswordToken: String,
     resetPasswordExpire: Date,
+    // SHA-256 hash of the emailed one-time code (not the code itself), plus
+    // a counter so the 6 digits can't be brute-forced.
     otpCode: {
       type: String,
       select: false,
@@ -108,13 +141,14 @@ const userSchema = new mongoose.Schema(
       type: Date,
       select: false,
     },
+    otpAttempts: {
+      type: Number,
+      default: 0,
+      select: false,
+    },
     isEmailVerified: {
       type: Boolean,
       default: false,
-    },
-    tempRegistrationData: {
-      type: mongoose.Schema.Types.Mixed,
-      select: false,
     },
   },
   {

@@ -13,12 +13,15 @@ import {
   ExternalLink,
   ShieldAlert
 } from "lucide-react";
-import { connectMetaMask, getConnectedAccount, isMetaMaskInstalled, sendMetaMaskTransaction } from "../../services/web3";
+import { connectMetaMask, waitForEthereum } from "../../services/web3";
+import { makePaymentOnChain } from "../../services/paymentLedger";
 import { useAuth } from "../../context/AuthContext";
 import WalletPinModal from "../WalletPinModal";
+import HelpTip from "../HelpTip";
 import "../../styles/ProfilePage.css";
 
-const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+import { API_URL } from "../../config";
+const BASE_URL = API_URL;
 
 const WalletCard = ({ user }) => {
   const { updateUserFields } = useAuth();
@@ -42,29 +45,34 @@ const WalletCard = ({ user }) => {
   const [connectError, setConnectError] = useState("");
   const [metamaskInstalled, setMetamaskInstalled] = useState(true);
 
-  const token = user?.token || localStorage.getItem("token");
+  const token = user?.token;
 
-  // Auto-detect MetaMask on mount and restore connected account
+  // Sync wallet UI state from the current user on every login/account
+  // switch — always, not just when they happen to have a linked wallet.
+  // (Previously this only *set* walletAddress/isLinked when the user had
+  // one, so switching to a brand-new unlinked user without a hard page
+  // reload left the previous user's "Connected" state on screen.)
   useEffect(() => {
-    const autoDetect = async () => {
-      if (user?.blockchainWallet?.address) {
-        setWalletAddress(user.blockchainWallet.address);
-        setIsLinked(user.blockchainWallet.isLinked);
-      }
+    setWalletAddress(user?.blockchainWallet?.address || "");
+    setIsLinked(user?.blockchainWallet?.isLinked || false);
 
-      // Check MetaMask installed
-      if (!isMetaMaskInstalled()) {
-        setMetamaskInstalled(false);
-        return;
-      }
+    // The extension injects itself a moment after the page loads, so wait for it
+    // instead of checking once (which wrongly said "not installed").
+    let alive = true;
+    waitForEthereum(2500).then((provider) => {
+      if (alive) setMetamaskInstalled(Boolean(provider));
+    });
 
-      // Auto-reconnect if already authorized
-      const existing = await getConnectedAccount();
-      if (existing && !isLinked) {
-        setWalletAddress(existing);
-      }
+    // Deliberately not auto-filling from `eth_accounts` here: MetaMask
+    // grants site permission per browser/origin, not per app account, so
+    // "an account MetaMask already has cached for this site" is not the
+    // same thing as "this user's linked wallet" — showing it as connected
+    // would be misleading (and confusing when testing multiple accounts
+    // in one browser). The explicit "Connect MetaMask" button is the only
+    // path that actually links a wallet to this user.
+    return () => {
+      alive = false;
     };
-    autoDetect();
   }, [user]);
 
   // Handle MetaMask connection
@@ -95,6 +103,19 @@ const WalletCard = ({ user }) => {
       setConnectError(err.message || "Failed to connect MetaMask. Please try again.");
     } finally {
       setConnecting(false);
+    }
+  };
+
+  // Disconnect the linked wallet from this account (e.g. it was linked by mistake)
+  const handleUnlink = async () => {
+    if (!window.confirm("Unlink this MetaMask wallet from your BookConnect account? Your balance and payments are not affected.")) return;
+    try {
+      await axios.delete(`${BASE_URL}/api/auth/link-wallet`);
+      setIsLinked(false);
+      setWalletAddress("");
+      updateUserFields({ blockchainWallet: { address: "", isLinked: false }, walletAddress: "" });
+    } catch (err) {
+      setConnectError(err.response?.data?.message || "Could not unlink the wallet. Please try again.");
     }
   };
 
@@ -140,15 +161,29 @@ const WalletCard = ({ user }) => {
     } else if (pinAction === "transfer") {
       setTransferring(true);
       try {
-        const recipientAddr = selectedRecipient.blockchainWallet?.address || selectedRecipient.walletAddress || "0x0000000000000000000000000000000000000000";
+        const recipientAddr = selectedRecipient.blockchainWallet?.address || selectedRecipient.walletAddress || "";
         const ethVal = (parseFloat(transferData.amount) * 0.0001).toFixed(5);
-        
+
         let txHash = "";
-        try {
-          txHash = await sendMetaMaskTransaction(recipientAddr, ethVal);
-        } catch (metamaskErr) {
-          throw new Error("MetaMask transfer rejected/failed: " + metamaskErr.message);
+        let onChain = false;
+
+        if (recipientAddr) {
+          // Recipient has a linked wallet — move real Sepolia ETH to them
+          // and record the payment on-chain, atomically, via the
+          // PaymentLedger contract (both happen in one transaction, or
+          // neither does).
+          try {
+            const result = await makePaymentOnChain(recipientAddr, ethVal, "p2p_transfer", walletAddress);
+            txHash = result.txHash;
+            onChain = true;
+          } catch (chainErr) {
+            throw new Error("On-chain payment failed: " + (chainErr.reason || chainErr.shortMessage || chainErr.message || "Transaction rejected."));
+          }
         }
+        // If the recipient has no linked wallet, there is nowhere valid to
+        // send real ETH — skip the on-chain step entirely rather than
+        // sending funds to a placeholder/burn address, and fall back to an
+        // off-chain-only platform transfer below.
 
         const { data } = await axios.post(
           `${BASE_URL}/api/blockchain/transfer`,
@@ -157,13 +192,19 @@ const WalletCard = ({ user }) => {
             amount: transferData.amount,
             pin,
             note: transferData.note || "Web3 P2P Payment Transfer",
-            txHash
+            txHash,
+            network: onChain ? "sepolia" : undefined
           },
           { headers: { Authorization: `Bearer ${token}` } }
         );
 
         if (data.success) {
-          alert(`Successfully sent $${transferData.amount} (tx: ${txHash.slice(0, 10)}...) to ${selectedRecipient.name}`);
+          alert(
+            (onChain
+              ? `Successfully sent $${transferData.amount} and ${ethVal} ETH (on-chain tx: ${txHash.slice(0, 10)}...) to ${selectedRecipient.name}`
+              : `Successfully sent $${transferData.amount} to ${selectedRecipient.name} (in-app only: they have no linked wallet yet).`) +
+              (data.chainWarning ? `\n\n${data.chainWarning}` : "")
+          );
           updateUserFields({ walletBalance: data.senderWalletBalance });
           setTransferModalOpen(false);
           setSelectedRecipient(null);
@@ -206,8 +247,8 @@ const WalletCard = ({ user }) => {
       <div
         className={`wallet-card ${isLinked ? "wallet-card--linked" : ""}`}
         style={{
-          background: isLinked ? "#ecfdf5" : "#faf8ff",
-          border: isLinked ? "1px solid #a7f3d0" : "1px solid #ede9fe",
+          background: isLinked ? "var(--success-bg)" : "var(--accent-50)",
+          border: isLinked ? "1px solid var(--success)" : "1px solid var(--accent-100)",
           borderRadius: 16,
           padding: 20,
           display: "flex",
@@ -222,8 +263,8 @@ const WalletCard = ({ user }) => {
             width: 44,
             height: 44,
             borderRadius: 12,
-            background: isLinked ? "#d1fae5" : "#f3f0ff",
-            color: isLinked ? "#059669" : "#7c3aed",
+            background: isLinked ? "var(--success-bg)" : "var(--accent-50)",
+            color: isLinked ? "var(--success)" : "var(--accent-600)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center"
@@ -231,10 +272,14 @@ const WalletCard = ({ user }) => {
             <Wallet size={24} />
           </div>
           <div>
-            <span className="wallet-label" style={{ fontSize: 15, fontWeight: "bold", color: "#1a1a2e", display: "block" }}>
+            <span className="wallet-label" style={{ fontSize: 15, fontWeight: "bold", color: "var(--text-primary)", display: "block" }}>
               {isLinked ? "MetaMask Wallet Connected" : "No Crypto Wallet Linked"}
+              <HelpTip
+                title="What is MetaMask?"
+                text="A free browser extension that works as a crypto wallet. It is optional — you only need it for the blockchain features. Linking it does not move any money."
+              />
             </span>
-            <span className="wallet-sub" style={{ fontSize: 12, color: "#64748b", fontFamily: "monospace" }}>
+            <span className="wallet-sub" style={{ fontSize: 12, color: "var(--text-secondary)", fontFamily: "monospace" }}>
               {isLinked ? `${walletAddress.slice(0, 10)}...${walletAddress.slice(-6)}` : "Connect MetaMask for Web3 transactions"}
             </span>
           </div>
@@ -250,53 +295,40 @@ const WalletCard = ({ user }) => {
               alignItems: "center",
               gap: 6,
               padding: "8px 14px",
-              background: "#ffffff",
-              border: "1px solid #ede9fe",
+              background: "var(--bg-primary)",
+              border: "1px solid var(--accent-100)",
               borderRadius: 10,
               fontSize: 12,
               fontWeight: 600,
-              color: "#1e293b",
+              color: "var(--text-primary)",
               cursor: "pointer",
               fontFamily: "'Sora', sans-serif"
             }}
           >
-            {showBalance ? <EyeOff size={14} color="#64748b" /> : <Eye size={14} color="#7c3aed" />}
+            {showBalance ? <EyeOff size={14} color="var(--text-secondary)" /> : <Eye size={14} color="var(--accent-600)" />}
             <span>{showBalance ? `$${(user?.walletBalance || 1000).toFixed(2)}` : "$ ••••••"}</span>
           </button>
 
           {/* Connect / Connected Status */}
           {isLinked ? (
-            <div style={{ display: "flex", alignItems: "center", gap: 6, color: "#059669", fontSize: 12, fontWeight: "bold" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--success)", fontSize: 12, fontWeight: "bold" }}>
               <CheckCircle size={18} />
               <span>Verified</span>
+              <button
+                onClick={handleUnlink}
+                title="Disconnect this wallet from your account"
+                style={{ marginLeft: 6, padding: "3px 8px", fontSize: 11, borderRadius: 8, cursor: "pointer", background: "transparent", color: "var(--text-secondary)", border: "1px solid var(--accent-100)" }}
+              >
+                Unlink
+              </button>
             </div>
-          ) : !metamaskInstalled ? (
-            <a
-              href="https://metamask.io/download/"
-              target="_blank"
-              rel="noreferrer"
-              style={{
-                padding: "8px 14px",
-                background: "#f6851b",
-                color: "#fff",
-                borderRadius: 10,
-                fontWeight: "bold",
-                fontSize: 12,
-                textDecoration: "none",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 6
-              }}
-            >
-              🦊 Install MetaMask
-            </a>
           ) : (
             <button
               onClick={handleConnectMetaMask}
               disabled={connecting}
               style={{
                 padding: "8px 16px",
-                background: connecting ? "#94a3b8" : "linear-gradient(135deg, #f6851b 0%, #e2761b 100%)",
+                background: connecting ? "var(--text-muted)" : "linear-gradient(135deg, #f6851b 0%, #e2761b 100%)",
                 color: "#fff",
                 border: "none",
                 borderRadius: 10,
@@ -316,16 +348,27 @@ const WalletCard = ({ user }) => {
               )}
             </button>
           )}
+          {!isLinked && !metamaskInstalled && (
+            <a
+              href="https://metamask.io/download/"
+              target="_blank"
+              rel="noreferrer"
+              style={{ fontSize: 11, color: "#f6851b", fontWeight: 600, textDecoration: "underline" }}
+              title="MetaMask was not detected in this browser"
+            >
+              Get MetaMask
+            </a>
+          )}
 
           {/* Transaction History Button */}
           <button
             onClick={handleOpenTxHistory}
             style={{
               padding: "8px 12px",
-              background: "#ffffff",
-              border: "1px solid #ede9fe",
+              background: "var(--bg-primary)",
+              border: "1px solid var(--accent-100)",
               borderRadius: 10,
-              color: "#475569",
+              color: "var(--text-secondary)",
               cursor: "pointer",
               display: "flex",
               alignItems: "center",
@@ -350,7 +393,7 @@ const WalletCard = ({ user }) => {
             }}
             style={{
               padding: "8px 12px",
-              background: "linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)",
+              background: "linear-gradient(135deg, var(--accent-600) 0%, var(--accent-700) 100%)",
               border: "none",
               borderRadius: 10,
               color: "#ffffff",
@@ -383,16 +426,16 @@ const WalletCard = ({ user }) => {
           padding: 20
         }}>
           <div style={{
-            background: "#1e293b",
-            border: "1px solid rgba(255, 255, 255, 0.12)",
+            background: "var(--bg-primary)",
+            border: "1px solid color-mix(in srgb, var(--text-primary) 8%, transparent)",
             borderRadius: 20,
             width: "100%",
             maxWidth: 420,
             padding: 28,
-            boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
+            boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
             position: "relative",
-            color: "#f8fafc",
-            fontFamily: "'Sora', sans-serif"
+            color: "var(--text-primary)",
+            fontFamily: "var(--font-sans)"
           }}>
             {/* Header */}
             <button
@@ -409,7 +452,7 @@ const WalletCard = ({ user }) => {
                 right: 18,
                 background: "none",
                 border: "none",
-                color: "#94a3b8",
+                color: "var(--text-muted)",
                 cursor: "pointer"
               }}
             >
@@ -421,23 +464,28 @@ const WalletCard = ({ user }) => {
                 width: 54,
                 height: 54,
                 borderRadius: "50%",
-                background: "rgba(124, 58, 237, 0.15)",
-                border: "1px solid rgba(124, 58, 237, 0.3)",
+                background: "rgba(79, 70, 229, 0.15)",
+                border: "1px solid rgba(79, 70, 229, 0.3)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 margin: "0 auto 12px",
-                color: "#a78bfa"
+                color: "var(--accent-700)"
               }}>
                 <Send size={24} />
               </div>
               <h3 style={{ fontSize: 18, fontWeight: 700, margin: "0 0 6px 0" }}>Web3 P2P Balance Transfer</h3>
-              <p style={{ fontSize: 12, color: "#94a3b8", margin: 0 }}>Transfer funds securely to another author, reader, or publisher.</p>
+              <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>Transfer funds securely to another author, reader, or publisher.
+                <HelpTip
+                  title="How the payment is recorded"
+                  text="Your in-app balance always moves. If the other person has linked MetaMask, a small test-ETH payment is also sent and recorded on the Sepolia practice blockchain (it has no real money value). If they have not, it is an in-app transfer only."
+                />
+              </p>
             </div>
 
             {/* Recipient Search or Display */}
             <div style={{ marginBottom: 16 }}>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#cbd5e1", marginBottom: 6 }}>Search Recipient</label>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 6 }}>Search Recipient</label>
               {!selectedRecipient ? (
                 <div style={{ position: "relative" }}>
                   <input
@@ -448,10 +496,10 @@ const WalletCard = ({ user }) => {
                     style={{
                       width: "100%",
                       padding: "10px 14px",
-                      background: "rgba(255, 255, 255, 0.05)",
-                      border: "1px solid rgba(255, 255, 255, 0.12)",
+                      background: "color-mix(in srgb, var(--text-primary) 4%, transparent)",
+                      border: "1px solid color-mix(in srgb, var(--text-primary) 8%, transparent)",
                       borderRadius: 10,
-                      color: "#f8fafc",
+                      color: "var(--text-primary)",
                       fontSize: 14,
                       outline: "none"
                     }}
@@ -462,13 +510,14 @@ const WalletCard = ({ user }) => {
                       top: "100%",
                       left: 0,
                       right: 0,
-                      background: "#1e293b",
-                      border: "1px solid rgba(255, 255, 255, 0.12)",
+                      background: "var(--bg-primary)",
+                      border: "1px solid color-mix(in srgb, var(--text-primary) 8%, transparent)",
                       borderRadius: 10,
                       marginTop: 6,
                       maxHeight: 180,
                       overflowY: "auto",
-                      zIndex: 10
+                      zIndex: 10,
+                      boxShadow: "var(--shadow-lg)"
                     }}>
                       {searchResults.map((r) => (
                         <div
@@ -482,19 +531,19 @@ const WalletCard = ({ user }) => {
                           style={{
                             padding: "10px 14px",
                             cursor: "pointer",
-                            borderBottom: "1px solid rgba(255, 255, 255, 0.05)",
+                            borderBottom: "1px solid color-mix(in srgb, var(--text-primary) 4%, transparent)",
                             display: "flex",
                             alignItems: "center",
                             gap: 10
                           }}
-                          onMouseEnter={(e) => e.currentTarget.style.background = "rgba(255,255,255,0.05)"}
+                          onMouseEnter={(e) => e.currentTarget.style.background = "color-mix(in srgb, var(--text-primary) 4%, transparent)"}
                           onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
                         >
                           <div style={{
                             width: 28,
                             height: 28,
                             borderRadius: "50%",
-                            background: "#7c3aed",
+                            background: "var(--accent-600)",
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "center",
@@ -510,7 +559,7 @@ const WalletCard = ({ user }) => {
                           </div>
                           <div>
                             <span style={{ display: "block", fontSize: 13, fontWeight: "bold" }}>{r.name}</span>
-                            <span style={{ display: "block", fontSize: 10, color: "#94a3b8" }}>{r.email} • {r.role}</span>
+                            <span style={{ display: "block", fontSize: 10, color: "var(--text-muted)" }}>{r.email} • {r.role}</span>
                           </div>
                         </div>
                       ))}
@@ -519,8 +568,8 @@ const WalletCard = ({ user }) => {
                 </div>
               ) : (
                 <div style={{
-                  background: "rgba(124, 58, 237, 0.08)",
-                  border: "1px solid rgba(124, 58, 237, 0.2)",
+                  background: "rgba(79, 70, 229, 0.08)",
+                  border: "1px solid rgba(79, 70, 229, 0.2)",
                   padding: "10px 14px",
                   borderRadius: 10,
                   display: "flex",
@@ -532,7 +581,7 @@ const WalletCard = ({ user }) => {
                       width: 32,
                       height: 32,
                       borderRadius: "50%",
-                      background: "#7c3aed",
+                      background: "var(--accent-600)",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
@@ -548,12 +597,12 @@ const WalletCard = ({ user }) => {
                     </div>
                     <div>
                       <span style={{ display: "block", fontSize: 13, fontWeight: "bold" }}>{selectedRecipient.name}</span>
-                      <span style={{ display: "block", fontSize: 10, color: "#a78bfa" }}>{selectedRecipient.role}</span>
+                      <span style={{ display: "block", fontSize: 10, color: "var(--accent-700)" }}>{selectedRecipient.role}</span>
                     </div>
                   </div>
                   <button
                     onClick={() => setSelectedRecipient(null)}
-                    style={{ background: "none", border: "none", color: "#ef4444", fontSize: 11, cursor: "pointer", textDecoration: "underline" }}
+                    style={{ background: "none", border: "none", color: "var(--danger)", fontSize: 11, cursor: "pointer", textDecoration: "underline" }}
                   >
                     Change
                   </button>
@@ -563,7 +612,7 @@ const WalletCard = ({ user }) => {
 
             {/* Amount input */}
             <div style={{ marginBottom: 16 }}>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#cbd5e1", marginBottom: 6 }}>Amount ($)</label>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 6 }}>Amount ($)</label>
               <input
                 type="number"
                 min="0.01"
@@ -574,10 +623,10 @@ const WalletCard = ({ user }) => {
                 style={{
                   width: "100%",
                   padding: "10px 14px",
-                  background: "rgba(255, 255, 255, 0.05)",
-                  border: "1px solid rgba(255, 255, 255, 0.12)",
+                  background: "color-mix(in srgb, var(--text-primary) 4%, transparent)",
+                  border: "1px solid color-mix(in srgb, var(--text-primary) 8%, transparent)",
                   borderRadius: 10,
-                  color: "#f8fafc",
+                  color: "var(--text-primary)",
                   fontSize: 14,
                   outline: "none"
                 }}
@@ -586,7 +635,7 @@ const WalletCard = ({ user }) => {
 
             {/* Note input */}
             <div style={{ marginBottom: 20 }}>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#cbd5e1", marginBottom: 6 }}>Note (Optional)</label>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 6 }}>Note (Optional)</label>
               <input
                 type="text"
                 placeholder="Add a memo..."
@@ -595,10 +644,10 @@ const WalletCard = ({ user }) => {
                 style={{
                   width: "100%",
                   padding: "10px 14px",
-                  background: "rgba(255, 255, 255, 0.05)",
-                  border: "1px solid rgba(255, 255, 255, 0.12)",
+                  background: "color-mix(in srgb, var(--text-primary) 4%, transparent)",
+                  border: "1px solid color-mix(in srgb, var(--text-primary) 8%, transparent)",
                   borderRadius: 10,
-                  color: "#f8fafc",
+                  color: "var(--text-primary)",
                   fontSize: 14,
                   outline: "none"
                 }}
@@ -611,7 +660,7 @@ const WalletCard = ({ user }) => {
               style={{
                 width: "100%",
                 padding: "12px",
-                background: "linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)",
+                background: "linear-gradient(135deg, var(--accent-600) 0%, var(--accent-700) 100%)",
                 color: "#fff",
                 border: "none",
                 borderRadius: 10,
@@ -634,12 +683,12 @@ const WalletCard = ({ user }) => {
       {/* Connection Error Banner */}
       {connectError && (
         <div style={{
-          background: "rgba(239, 68, 68, 0.08)",
-          border: "1px solid rgba(239, 68, 68, 0.3)",
+          background: "rgba(220, 38, 38, 0.08)",
+          border: "1px solid rgba(220, 38, 38, 0.3)",
           borderRadius: 10,
           padding: "10px 14px",
           fontSize: 12,
-          color: "#ef4444",
+          color: "var(--danger)",
           display: "flex",
           alignItems: "flex-start",
           gap: 8
@@ -659,12 +708,12 @@ const WalletCard = ({ user }) => {
       {/* Wallet Linked Success Banner */}
       {isLinked && walletAddress && (
         <div style={{
-          background: "rgba(16, 185, 129, 0.08)",
-          border: "1px solid rgba(16, 185, 129, 0.3)",
+          background: "rgba(22, 163, 74, 0.08)",
+          border: "1px solid rgba(22, 163, 74, 0.3)",
           borderRadius: 10,
           padding: "10px 14px",
           fontSize: 12,
-          color: "#10b981",
+          color: "var(--success)",
           display: "flex",
           alignItems: "center",
           gap: 8
@@ -699,27 +748,27 @@ const WalletCard = ({ user }) => {
           padding: 20
         }}>
           <div style={{
-            background: "#1e293b",
-            border: "1px solid rgba(255, 255, 255, 0.12)",
+            background: "var(--bg-primary)",
+            border: "1px solid color-mix(in srgb, var(--text-primary) 8%, transparent)",
             borderRadius: 20,
             width: "100%",
             maxWidth: 540,
             maxHeight: "80vh",
             display: "flex",
             flexDirection: "column",
-            boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
+            boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
             position: "relative",
-            color: "#f8fafc",
-            fontFamily: "'Sora', sans-serif",
+            color: "var(--text-primary)",
+            fontFamily: "var(--font-sans)",
             overflow: "hidden"
           }}>
             {/* Header */}
-            <div style={{ padding: "18px 24px", borderBottom: "1px solid rgba(255,255,255,0.08)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ padding: "18px 24px", borderBottom: "1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <History size={20} color="#a78bfa" />
+                <History size={20} color="var(--accent-600)" />
                 <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>Web3 Transaction Ledger</h3>
               </div>
-              <button onClick={() => setTxHistoryOpen(false)} style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer" }}>
+              <button onClick={() => setTxHistoryOpen(false)} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}>
                 <X size={20} />
               </button>
             </div>
@@ -727,9 +776,9 @@ const WalletCard = ({ user }) => {
             {/* Content List */}
             <div style={{ flex: 1, overflowY: "auto", padding: 20 }}>
               {loadingTxs ? (
-                <div style={{ textAlign: "center", padding: 30, color: "#94a3b8" }}>Loading transactions...</div>
+                <div style={{ textAlign: "center", padding: 30, color: "var(--text-muted)" }}>Loading transactions...</div>
               ) : transactions.length === 0 ? (
-                <div style={{ textAlign: "center", padding: 30, color: "#64748b" }}>No Web3 transactions found yet.</div>
+                <div style={{ textAlign: "center", padding: 30, color: "var(--text-secondary)" }}>No Web3 transactions found yet.</div>
               ) : (
                 transactions.map((tx) => {
                   const isSender = tx.sender?._id === user?._id;
@@ -741,8 +790,8 @@ const WalletCard = ({ user }) => {
                       style={{
                         padding: "12px 16px",
                         borderRadius: 12,
-                        background: "rgba(255, 255, 255, 0.03)",
-                        border: "1px solid rgba(255, 255, 255, 0.06)",
+                        background: "color-mix(in srgb, var(--text-primary) 2%, transparent)",
+                        border: "1px solid color-mix(in srgb, var(--text-primary) 5%, transparent)",
                         marginBottom: 10,
                         display: "flex",
                         alignItems: "center",
@@ -754,8 +803,8 @@ const WalletCard = ({ user }) => {
                           width: 38,
                           height: 38,
                           borderRadius: 10,
-                          background: isSender ? "rgba(239, 68, 68, 0.15)" : "rgba(16, 185, 129, 0.15)",
-                          color: isSender ? "#ef4444" : "#10b981",
+                          background: isSender ? "rgba(220, 38, 38, 0.15)" : "rgba(22, 163, 74, 0.15)",
+                          color: isSender ? "var(--danger)" : "var(--success)",
                           display: "flex",
                           alignItems: "center",
                           justifyContent: "center"
@@ -763,20 +812,32 @@ const WalletCard = ({ user }) => {
                           {isSender ? <ArrowUpRight size={20} /> : <ArrowDownLeft size={20} />}
                         </div>
                         <div>
-                          <span style={{ display: "block", fontSize: 13, fontWeight: "bold", color: "#f8fafc" }}>
+                          <span style={{ display: "block", fontSize: 13, fontWeight: "bold", color: "var(--text-primary)" }}>
                             {isSender ? `Sent to ${partner?.name || "User"}` : `Received from ${partner?.name || "User"}`}
                           </span>
-                          <span style={{ display: "block", fontSize: 10, color: "#94a3b8", fontFamily: "monospace" }}>
-                            Tx: {tx.txHash ? `${tx.txHash.slice(0, 14)}...` : "0x..."}
-                          </span>
+                          {tx.onChain && tx.txHash ? (
+                            <a
+                              href={`https://${tx.network === "sepolia" ? "sepolia." : ""}etherscan.io/tx/${tx.txHash}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10, color: "var(--accent-600)", fontFamily: "monospace", textDecoration: "none" }}
+                            >
+                              <ExternalLink size={10} />
+                              {tx.txHash.slice(0, 14)}...
+                            </a>
+                          ) : (
+                            <span style={{ display: "block", fontSize: 10, color: "var(--text-muted)" }}>
+                              Off-chain platform transfer
+                            </span>
+                          )}
                         </div>
                       </div>
 
                       <div style={{ textAlign: "right" }}>
-                        <span style={{ display: "block", fontSize: 14, fontWeight: "bold", color: isSender ? "#ef4444" : "#10b981" }}>
+                        <span style={{ display: "block", fontSize: 14, fontWeight: "bold", color: isSender ? "var(--danger)" : "var(--success)" }}>
                           {isSender ? `- $${tx.amount.toFixed(2)}` : `+ $${tx.amount.toFixed(2)}`}
                         </span>
-                        <span style={{ display: "block", fontSize: 10, color: "#64748b" }}>
+                        <span style={{ display: "block", fontSize: 10, color: "var(--text-secondary)" }}>
                           {new Date(tx.createdAt).toLocaleDateString()}
                         </span>
                       </div>

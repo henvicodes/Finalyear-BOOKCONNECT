@@ -5,9 +5,9 @@ import { useAuth } from "../context/AuthContext";
 const PublicRoute = () => {
   const { isAuthenticated } = useAuth();
 
-  // If user is logged in, redirect them to their profile or dashboard
+  // If user is logged in, redirect them to their dashboard
   if (isAuthenticated) {
-    return <Navigate to="/profile" replace />;
+    return <Navigate to="/dashboard" replace />;
   }
 
   // Otherwise, render the Login/Register page

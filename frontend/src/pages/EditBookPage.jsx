@@ -267,8 +267,12 @@ const EditBookPage = () => {
                   >
                     <option value="draft">Draft</option>
                     <option value="published">Published</option>
-                    <option value="under_review">Under Review</option>
                     <option value="archived">Archived</option>
+                    {["under_review", "seen", "cost_proposed", "declined"].includes(formData.status) && (
+                      <option value={formData.status} disabled>
+                        {formData.status === "declined" ? "Declined by publisher" : "With a publisher (set by the review process)"}
+                      </option>
+                    )}
                   </select>
                 </div>
 

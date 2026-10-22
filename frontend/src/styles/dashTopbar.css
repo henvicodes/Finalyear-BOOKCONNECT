@@ -1,0 +1,128 @@
+/* Dashboard top bar extras (the base bar comes from .dash-topbar in Dashboard.css). */
+.dtb {
+  gap: 14px;
+}
+.dtb-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+.dtb-search {
+  flex: 1;
+  max-width: 440px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  height: 38px;
+  border-radius: 10px;
+  color: var(--text-muted);
+  border: 1px solid color-mix(in srgb, var(--text-primary) 12%, transparent);
+  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+}
+.dtb-search:focus-within {
+  outline: 2px solid color-mix(in srgb, var(--accent-600) 45%, transparent);
+}
+.dtb-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+.dtb-right {
+  position: relative;
+  margin-left: auto;
+}
+.dtb-profile {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px 4px 4px;
+  border-radius: 999px;
+  cursor: pointer;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid color-mix(in srgb, var(--text-primary) 10%, transparent);
+}
+.dtb-profile:hover {
+  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+}
+.dtb-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--success, var(--accent-600));
+}
+.dtb-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.dtb-who {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+  text-align: left;
+}
+.dtb-who strong {
+  font-size: 12px;
+  color: var(--text-primary);
+}
+.dtb-who em {
+  font-size: 10px;
+  font-style: normal;
+  text-transform: capitalize;
+  color: var(--text-muted);
+}
+.dtb-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  min-width: 200px;
+  padding: 6px;
+  border-radius: 12px;
+  background: var(--bg-primary);
+  border: 1px solid color-mix(in srgb, var(--text-primary) 12%, transparent);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.3);
+  z-index: 60;
+}
+.dtb-menu button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+  text-align: left;
+}
+.dtb-menu button:hover {
+  background: color-mix(in srgb, var(--text-primary) 7%, transparent);
+}
+.dtb-menu button.danger {
+  color: var(--danger);
+}
+@media (max-width: 768px) {
+  .dtb-who,
+  .dtb-title {
+    display: none;
+  }
+  .dtb-search {
+    max-width: none;
+  }
+}

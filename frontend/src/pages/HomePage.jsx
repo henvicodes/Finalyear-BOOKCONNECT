@@ -1,63 +1,57 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
 import {
   BookOpen,
   Shield,
-  Sparkles,
+  Zap,
   Users,
   Globe,
+  Award,
+  ChevronRight,
+  Sparkles,
+  TrendingUp,
+  MessageCircle,
   Lock,
   PenTool,
   Star,
   ArrowRight,
-  ChevronRight,
-  CheckCircle,
-  Search,
-  Send,
-  Award,
 } from "lucide-react";
 import "../styles/HomePage.css";
 
 const HomePage = () => {
-  const { user } = useAuth(); // Check if user is logged in
-
   const features = [
     {
-      icon: <PenTool size={24} />,
+      icon: <PenTool />,
       title: "AI Writing Assistant",
       description:
-        "Get real-time grammar suggestions, style improvements, and multilingual support directly in your editor.",
+        "Get real-time grammar suggestions, style improvements, and multilingual support",
     },
     {
-      icon: <Shield size={24} />,
+      icon: <Shield />,
       title: "Blockchain Ownership",
       description:
-        "Secure your work with immutable proof of ownership and a transparent, timestamped history.",
+        "Secure your work with immutable proof of ownership and transparent history",
     },
     {
-      icon: <Sparkles size={24} />,
+      icon: <Sparkles />,
       title: "Smart Recommendations",
-      description:
-        "Our AI engine analyzes reading habits to suggest the perfect books and authors for you.",
+      description: "AI-powered personalized book and author recommendations",
     },
     {
-      icon: <Users size={24} />,
+      icon: <Users />,
       title: "Collaborative Writing",
       description:
-        "Write together in real-time with version control and clear attribution for co-authors.",
+        "Write together in real-time with version control and attribution",
     },
     {
-      icon: <Globe size={24} />,
+      icon: <Globe />,
       title: "Multilingual Support",
-      description:
-        "Publish and read in multiple languages with built-in AI translation tools.",
+      description: "Publish and read in multiple languages with AI translation",
     },
     {
-      icon: <Lock size={24} />,
+      icon: <Lock />,
       title: "Plagiarism Detection",
-      description:
-        "AI-powered content verification and originality checks to protect your intellectual property.",
+      description: "AI-powered content verification and originality checks",
     },
   ];
 
@@ -68,30 +62,27 @@ const HomePage = () => {
     { number: "500+", label: "Publishers" },
   ];
 
-  const roles = [
+  const testimonials = [
     {
-      icon: <Search size={28} />,
-      title: "For Readers",
-      description:
-        "Discover your next favorite book through AI-driven recommendations. Track your reading progress, leave reviews, and build your personal library in one place.",
-      color: "#059669",
-      bg: "#ecfdf5",
+      name: "Sarah Johnson",
+      role: "Author",
+      content:
+        "This platform revolutionized how I publish and protect my work. The AI assistant is incredible!",
+      rating: 5,
     },
     {
-      icon: <PenTool size={28} />,
-      title: "For Authors",
-      description:
-        "Write with AI assistance, protect your work on the blockchain, and connect directly with publishers. Manage drafts, submissions, and royalties effortlessly.",
-      color: "#7c3aed",
-      bg: "#f3f0ff",
+      name: "Michael Chen",
+      role: "Publisher",
+      content:
+        "Finding talented authors has never been easier. The blockchain verification gives us complete trust.",
+      rating: 5,
     },
     {
-      icon: <Award size={28} />,
-      title: "For Publishers",
-      description:
-        "Discover talented authors, review manuscript submissions with AI quality scans, and securely negotiate publishing fees on a trusted ledger.",
-      color: "#0369a1",
-      bg: "#f0f9ff",
+      name: "Emily Rodriguez",
+      role: "Reader",
+      content:
+        "The recommendations are spot-on. I discover books that perfectly match my interests.",
+      rating: 5,
     },
   ];
 
@@ -121,11 +112,8 @@ const HomePage = () => {
             </p>
 
             <div className="hero-buttons">
-              <Link
-                to={user ? "/dashboard" : "/register"}
-                className="btn-primary"
-              >
-                {user ? "Go to Dashboard" : "Get Started"}
+              <Link to="/register" className="btn-primary">
+                Get Started
                 <ArrowRight size={20} />
               </Link>
               <Link to="/about" className="btn-secondary">
@@ -133,6 +121,7 @@ const HomePage = () => {
               </Link>
             </div>
 
+            {/* Stats */}
             <div className="stats-grid">
               {stats.map((stat, index) => (
                 <div key={index} className="stat-item">
@@ -142,19 +131,6 @@ const HomePage = () => {
               ))}
             </div>
           </div>
-        </div>
-
-        <div className="wave-divider">
-          <svg
-            viewBox="0 0 1440 100"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <path
-              d="M0,64L80,69.3C160,75,320,85,480,80C640,75,800,53,960,48C1120,43,1280,53,1360,58.7L1440,64L1440,100L1360,100C1280,100,1120,100,960,100C800,100,640,100,480,100C320,100,160,100,80,100L0,100Z"
-              fill="#f8fafc"
-            />
-          </svg>
         </div>
       </section>
 
@@ -179,39 +155,35 @@ const HomePage = () => {
         </div>
       </section>
 
-      {/* How It Works Section (Updated Flow) */}
+      {/* How It Works Section */}
       <section className="how-it-works">
         <div className="container">
           <h2 className="section-title">How It Works</h2>
           <p className="section-subtitle">
-            Four simple steps from draft to a globally published book
+            Four simple steps to join the future of digital publishing
           </p>
 
           <div className="steps-grid">
             {[
               {
                 step: "01",
-                title: "Create Your Account",
-                description:
-                  "Join as a Reader, Author, or Publisher to access your custom dashboard.",
+                title: "Create Account",
+                description: "Sign up as reader, author, or publisher",
               },
               {
                 step: "02",
-                title: "Write & Polish",
-                description:
-                  "Draft your manuscript in our editor with the help of the Inline AI Assistant.",
+                title: "Upload Content",
+                description: "Publish your work with AI assistance",
               },
               {
                 step: "03",
-                title: "Lock on Blockchain",
-                description:
-                  "Secure your copyright and proof of ownership immutably on the Ethereum ledger.",
+                title: "Blockchain Verification",
+                description: "Secure ownership on the blockchain",
               },
               {
                 step: "04",
-                title: "Submit & Publish",
-                description:
-                  "Submit to publishers for review, negotiate fees, and publish to the marketplace.",
+                title: "Connect & Grow",
+                description: "Engage with readers and publishers",
               },
             ].map((item, index) => (
               <div key={index} className="step-card">
@@ -229,87 +201,46 @@ const HomePage = () => {
         </div>
       </section>
 
-      {/* Built for Every Role Section (Replaced Testimonials) */}
-      <section
-        className="testimonials-section"
-        style={{ background: "#ffffff" }}
-      >
+      {/* Testimonials Section */}
+      <section className="testimonials-section">
         <div className="container">
-          <h2 className="section-title">Built for Every Role</h2>
+          <h2 className="section-title">What Our Community Says</h2>
           <p className="section-subtitle">
-            Whether you read, write, or publish, BookConnect provides the tools
-            you need to succeed.
+            Join thousands of satisfied users who have transformed their
+            literary journey
           </p>
 
           <div className="testimonials-grid">
-            {roles.map((role, index) => (
-              <div
-                key={index}
-                className="testimonial-card"
-                style={{
-                  background: role.bg,
-                  border: `1px solid ${role.color}22`,
-                  textAlign: "left",
-                }}
-              >
-                <div
-                  style={{
-                    width: 48,
-                    height: 48,
-                    borderRadius: 12,
-                    background: "#ffffff",
-                    color: role.color,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    marginBottom: 16,
-                    boxShadow: "0 4px 12px rgba(0,0,0,0.05)",
-                  }}
-                >
-                  {role.icon}
+            {testimonials.map((testimonial, index) => (
+              <div key={index} className="testimonial-card">
+                <div className="rating">
+                  {[...Array(testimonial.rating)].map((_, i) => (
+                    <Star key={i} className="star-filled" />
+                  ))}
                 </div>
-                <h3
-                  style={{
-                    fontSize: 18,
-                    fontWeight: 700,
-                    color: "#0f172a",
-                    marginBottom: 8,
-                  }}
-                >
-                  {role.title}
-                </h3>
-                <p
-                  style={{
-                    color: "#475569",
-                    fontSize: 14,
-                    lineHeight: 1.6,
-                    margin: 0,
-                  }}
-                >
-                  {role.description}
-                </p>
+                <p className="testimonial-content">"{testimonial.content}"</p>
+                <div className="testimonial-author">{testimonial.name}</div>
+                <div className="testimonial-role">{testimonial.role}</div>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* CTA Section (Hidden if logged in) */}
-      {!user && (
-        <section className="cta-section">
-          <div className="container">
-            <h2 className="cta-title">Ready to Start Your Literary Journey?</h2>
-            <p className="cta-description">
-              Join the platform that's revolutionizing digital publishing with
-              AI and blockchain technology.
-            </p>
-            <Link to="/register" className="btn-cta">
-              Get Started Now
-              <ArrowRight size={20} />
-            </Link>
-          </div>
-        </section>
-      )}
+      {/* CTA Section */}
+      <section className="cta-section">
+        <div className="container">
+          <h2 className="cta-title">Ready to Start Your Literary Journey?</h2>
+          <p className="cta-description">
+            Join the platform that's revolutionizing digital publishing with AI
+            and blockchain technology.
+          </p>
+          <Link to="/register" className="btn-cta">
+            Get Started Now
+            <ArrowRight size={20} />
+          </Link>
+        </div>
+      </section>
     </div>
   );
 };

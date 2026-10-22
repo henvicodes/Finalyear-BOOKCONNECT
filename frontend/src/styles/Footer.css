@@ -1,158 +1,84 @@
 .footer {
-  background: #0f172a; /* Matches dark dashboard slate */
-  color: #f8fafc;
-  padding: 4rem 0 2rem;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  border-top: 1px solid var(--border-light);
+  padding: var(--spacing-2xl) 0 var(--spacing-md);
   margin-top: auto;
-  border-top: 1px solid #1e293b;
 }
 
 .footer-content {
-  max-width: 1280px;
+  max-width: var(--container-max);
   margin: 0 auto;
-  padding: 0 24px;
+  padding: 0 var(--spacing-md);
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr 1.5fr;
-  gap: 3rem;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--spacing-lg);
 }
 
-/* ── Brand Section ── */
-.footer-logo {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 20px;
-  font-weight: 800;
-  color: #ffffff;
-  text-decoration: none;
-  margin-bottom: 16px;
-  letter-spacing: -0.5px;
+.footer-section h3 {
+  font-size: var(--text-md);
+  font-weight: var(--font-semibold);
+  margin-bottom: 1.25rem;
+  color: var(--text-primary);
 }
 
 .footer-section p {
-  color: #94a3b8;
-  line-height: 1.6;
-  font-size: 14px;
-  max-width: 300px;
-}
-
-/* ── Links Section ── */
-.footer-section h3 {
-  font-size: 14px;
-  font-weight: 700;
-  margin-bottom: 20px;
-  color: #ffffff;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  line-height: var(--leading-relaxed);
+  margin-bottom: 1rem;
+  font-size: var(--text-sm);
 }
 
 .footer-section ul {
   list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+}
+
+.footer-section ul li {
+  margin-bottom: 0.75rem;
 }
 
 .footer-section ul li a {
-  color: #94a3b8;
+  color: var(--text-muted);
   text-decoration: none;
-  transition: all 0.2s ease;
-  font-size: 14px;
-  font-weight: 500;
-  display: inline-block;
+  transition: color var(--transition-fast);
+  display: flex;
+  align-items: center;
+  font-size: var(--text-sm);
 }
 
 .footer-section ul li a:hover {
-  color: #a78bfa; /* Purple accent */
-  transform: translateX(3px);
+  color: var(--text-primary);
 }
 
-/* ── Social Links ── */
-.social-links {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
+.footer-section ul li a svg {
+  width: 1.125rem;
+  height: 1.125rem;
 }
 
-.social-btn {
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-  background: #1e293b;
-  color: #cbd5e1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-decoration: none;
-  transition: all 0.2s ease;
-  border: 1px solid #334155;
-}
-
-.social-btn:hover {
-  background: #7c3aed;
-  color: #ffffff;
-  border-color: #7c3aed;
-  transform: translateY(-3px);
-  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.3);
-}
-
-/* ── Bottom Bar ── */
 .footer-bottom {
-  max-width: 1280px;
-  margin: 3rem auto 0;
-  padding: 1.5rem 24px 0;
-  border-top: 1px solid #1e293b;
+  max-width: var(--container-max);
+  margin: var(--spacing-lg) auto 0;
+  padding: var(--spacing-md) var(--spacing-md) 0;
+  border-top: 1px solid var(--border-light);
   text-align: center;
-  color: #64748b;
-  font-size: 13px;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
 }
 
-/* ── Responsive Design ── */
+/* Responsive Design */
 @media (max-width: 1024px) {
   .footer-content {
-    grid-template-columns: 1fr 1fr;
-    gap: 2.5rem;
-  }
-
-  .brand-section {
-    grid-column: 1 / -1; /* Span full width */
-    text-align: center;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-  }
-
-  .footer-section p {
-    max-width: 500px;
-    margin: 0 auto;
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 
 @media (max-width: 640px) {
-  .footer {
-    padding: 3rem 0 1.5rem;
-  }
-
   .footer-content {
     grid-template-columns: 1fr;
-    gap: 2rem;
     text-align: center;
   }
 
-  .footer-section h3 {
-    margin-bottom: 12px;
-  }
-
-  .footer-section ul {
-    align-items: center;
-  }
-
-  .footer-section ul li a:hover {
-    transform: none;
-  }
-
-  .social-links {
+  .footer-section ul li a {
     justify-content: center;
   }
 }

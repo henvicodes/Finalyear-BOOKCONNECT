@@ -1,10 +1,12 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { BookOpen, Users, Clock, TrendingUp } from "lucide-react";
+import { BookOpen, Users, Clock, TrendingUp, Shield } from "lucide-react";
 import StatBubble from "./StatBubble.jsx";
+import WalletCard from "./WalletCard.jsx";
 import VerificationBanner from "./VerificationBanner.jsx";
 import { useBooks } from "../../hooks/useBooks.js";
 import "../../styles/ProfilePage.css";
+import { authorOf } from "../../utils/bookDisplay";
 
 const ProjectRow = ({ book }) => {
   const phase =
@@ -21,7 +23,7 @@ const ProjectRow = ({ book }) => {
       <div className="project-info">
         <span className="project-title">{book.title}</span>
         <span className="project-meta">
-          by {book.author?.name} · {book.genre}
+          by {authorOf(book)} · {book.genre}
         </span>
       </div>
       <span className={`phase-badge phase--${phaseClass}`}>{phase}</span>
@@ -123,8 +125,17 @@ const PublisherProfileContent = ({ user }) => {
           with you.
         </div>
       </section>
+      {/* Wallet — readers and publishers can link MetaMask too, so payments
+          to/from them can be recorded on-chain */}
+      <section className="profile-section">
+        <h3 className="profile-section-title">
+          <Shield size={16} /> Wallet &amp; Payments
+        </h3>
+        <WalletCard user={user} />
+      </section>
     </>
   );
 };
+
 
 export default PublisherProfileContent;
