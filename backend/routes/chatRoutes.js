@@ -104,6 +104,11 @@ router.get("/conversations", protect, async (req, res) => {
   }
 });
 
+// GET /api/messages/ai/starters -> suggested first questions for the logged-in user's role
+router.get("/ai/starters", protect, (req, res) => {
+  res.json({ success: true, data: STARTERS[req.user.role] || STARTERS.reader });
+});
+
 // 2. GET /api/messages/:userId -> Load persistent chat history with a contact
 router.get("/:userId", protect, async (req, res) => {
   try {
@@ -205,23 +210,69 @@ router.post("/", protect, async (req, res) => {
 });
 
 // Helper: AI Chatbot message handler
+const ROLE_BRIEF = {
+  reader: "Readers browse and buy books, read them with themes / highlights / translation, rate and review them, keep a reading list and get recommendations.",
+  author: "Authors write chapters, run the readability and similarity check, publish directly or submit manuscripts to publishers, and register ownership (optionally on-chain).",
+  publisher: "Publishers read submitted manuscripts, run the checks, then make an offer (a publishing fee) or decline, and can ask an admin to verify their business.",
+  admin: "Admins see platform analytics, manage users (suspend, change role), review publisher verification requests, moderate books, view payments and the audit log.",
+};
+
 const ASSISTANT_PROMPT = (name, role) => `You are the BookConnect AI Assistant inside a digital publishing app.
 BookConnect lets authors write and publish books, publishers review manuscripts and make offers (or decline them),
-readers buy and read books, and everyone has an in-app wallet protected by a 4-digit PIN (MetaMask / Sepolia testnet is optional).
-The user is ${name}, a ${role}. Be friendly, concrete and brief (under 120 words). Help with writing, publishing, reading
-and how to use BookConnect. If you don't know something about the app, say so rather than guessing.`;
+readers buy and read books, admins keep the platform healthy, and everyone has an in-app wallet protected by a 4-digit PIN
+(MetaMask / Sepolia testnet is optional).
+The user is ${name}, a ${role}. ${ROLE_BRIEF[role] || ""}
+Be friendly, concrete and brief (under 120 words). Answer for THEIR role. If you don't know something about the app, say so rather than guessing.`;
+
+// Starter questions shown in the assistant panel, per role
+const STARTERS = {
+  reader: ["How do I buy a paid book?", "How do I rate or review a book?", "How can I translate a chapter?", "How do I recover my PIN?"],
+  author: ["How do I publish my book?", "What happens after I submit to a publisher?", "How does the similarity check work?", "What is MetaMask used for?"],
+  publisher: ["How do I make an offer?", "How do I decline a manuscript?", "How do I get verified?", "When do I get paid?"],
+  admin: ["How do I verify a publisher?", "How do I suspend a user?", "What does the audit log record?", "How do I read the overview charts?"],
+};
 
 // Answers used when no AI key is configured: plain keyword rules, matched on whole words.
 // Short words must match whole ("hi" must not match "history"); longer ones match as a word start ("thank" -> "thanks").
 const has = (text, ...words) => words.some((w) => new RegExp(`\\b${w}${w.length <= 3 ? "\\b" : ""}`, "i").test(text));
+const ROLE_ANSWERS = {
+  admin: [
+    [["suspend", "ban", "block"], "Open Users, find the person and press Suspend. A reason is required. They are signed out and can't log in until you press Reinstate. Admin accounts can't be suspended."],
+    [["verify", "verification", "verified", "badge", "approve"], "Open Publisher verification. For each request, look the registration number up on the official register (the link is shown), open the document, and check the name matches. Then Approve, or Reject with a reason the publisher will see."],
+    [["audit", "log", "history"], "The Audit log lists every admin action: who did it, what, to whom, and the reason. Suspensions, role changes, verification decisions and book removals are all recorded."],
+    [["chart", "overview", "analytics", "revenue", "money", "stat", "kpi"], "The Overview shows money moved, new users, new books and payments for the last 7, 30 or 90 days, with the change against the previous period. Each chart has a Table button for exact numbers, and the 'Needs attention' tiles jump to the right tab."],
+    [["unpublish", "delete", "remove", "plagiar", "similar", "flag", "content"], "In Content you can filter 'flagged for similarity', then Unpublish (the author is told why) or Delete. A book that readers already bought can only be unpublished."],
+    [["role", "promote"], "Users > Change role lets you switch someone between reader, author and publisher. Admins are created only by the server script, never in the app."],
+    [["payment", "transaction", "failed"], "Payments is a read-only list of every payment, with filters for type, status and on-chain. Failed payments also show under Platform health."],
+  ],
+  reader: [
+    [["library", "progress", "continue"], "Books you buy or unlock appear in My Library. Press Read Chapters to open the reader; the progress slider remembers where you are."],
+    [["rate", "rating", "review", "star"], "Open a book you own in the reader and click the stars at the top. You can't rate your own book, and paid books can only be rated by people who bought them."],
+    [["highlight", "note", "mark"], "Select text in the reader to highlight it. Highlights are saved per book and chapter on this device."],
+    [["reading list", "wishlist", "save for later"], "Use the heart on a book card to add it to your Reading List so you can find it later."],
+    [["matchmaker", "match"], "Matchmaker ranks authors and books against your reading history and interests. Rate or buy a few books first and the matches improve."],
+  ],
+  publisher: [
+    [["submission", "inbox", "incoming", "draft"], "Submissions lists manuscripts authors sent you. Opening one marks it as read, and you can read the full draft, run the readability and similarity check, then make an offer or decline."],
+    [["paid", "earn", "income"], "When an author accepts your offer they pay the fee from their wallet and it is added to your balance immediately. You can see it in your wallet and in your profile's payment history."],
+  ],
+  author: [
+    [["publish", "self"], "You can publish directly from Edit Manuscript, or submit it to a publisher who may make an offer. Direct publishing is free; a publisher's fee is only paid if you accept their offer."],
+    [["chapter", "write"], "Open My Books > Edit on a manuscript to write chapters. Your work is saved as you go and every meaningful edit adds a content fingerprint to its version history."],
+  ],
+};
+
 function builtInAnswer(content, user) {
   const t = content.trim();
+  for (const [words, answer] of ROLE_ANSWERS[user.role] || []) {
+    if (has(t, ...words)) return answer;
+  }
   if (has(t, "thank")) return "You're welcome! Ask me anything else about BookConnect.";
   if (has(t, "how are you", "how r u", "how do you do")) {
     return `I'm doing well, thanks ${user.name}! I'm running in basic mode right now (no AI key is set up), so I can answer questions about how BookConnect works. What would you like to know?`;
   }
   if (has(t, "hello", "hi", "hey", "good morning", "good evening")) {
-    return `Hello ${user.name}! I'm the BookConnect assistant. Ask me about publishing a book, offers and fees, your wallet and PIN, or reading and buying books.`;
+    return `Hello ${user.name}! I'm the BookConnect assistant. As a ${user.role}, you could ask me: "${(STARTERS[user.role] || STARTERS.reader)[0]}" or "${(STARTERS[user.role] || STARTERS.reader)[1]}"`;
   }
   if (has(t, "decline", "reject", "offer", "publisher", "publishing fee", "fee", "cost")) {
     return "When you send a manuscript, the publisher reads it and either sends an offer (a publishing fee) or declines it. If you accept an offer you pay the fee from your wallet with your PIN and the book goes live. If it's declined, you can edit it and send it to another publisher.";
@@ -245,7 +296,7 @@ function builtInAnswer(content, user) {
     return "The Matchmaker and Recommendations pages suggest books from your reading history, ratings and readers with similar taste. Rate a few books to make them better.";
   }
   if (has(t, "help", "what can you do", "feature")) {
-    return "I can explain how to publish a book, how offers and fees work, how your wallet, PIN and MetaMask work, how verification works, and how to read, rate and translate books.";
+    return `I can help with BookConnect as a ${user.role}. Try asking: ${(STARTERS[user.role] || STARTERS.reader).map((q) => `"${q}"`).join(", ")}.`;
   }
   return `I'm in basic mode (no AI key is set up), so I can only answer questions about using BookConnect, such as publishing, offers and fees, your wallet and PIN, MetaMask, verification, reading and translating. I couldn't match "${t.slice(0, 80)}". Try asking about one of those.`;
 }

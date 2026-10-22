@@ -102,3 +102,70 @@ describe("AI assistant chat", () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe("The assistant works for every role, with answers for that role", () => {
+  const pwd = "password123";
+  let tokens;
+
+  beforeAll(async () => {
+    await User.create({ name: "Chat Admin", email: "chat-admin@example.com", password: pwd, role: "admin", isEmailVerified: true });
+    const admin = (await request(app).post("/api/auth/login").send({ email: "chat-admin@example.com", password: pwd })).body.data.token;
+    const reader = await createVerifiedUser({ name: "Chat Reader", email: "chat-reader@example.com", password: pwd, role: "reader" });
+    const publisher = await createVerifiedUser({ name: "Chat Publisher", email: "chat-publisher@example.com", password: pwd, role: "publisher" });
+    const author = await createVerifiedUser({ name: "Chat Author", email: "chat-author2@example.com", password: pwd, role: "author" });
+    tokens = { admin, reader, publisher, author };
+  });
+
+  it("gives each role its own starter questions", async () => {
+    const seen = {};
+    for (const [role, t] of Object.entries(tokens)) {
+      const res = await request(app).get("/api/messages/ai/starters").set(auth(t));
+      expect(res.status).toBe(200);
+      expect(res.body.data.length).toBeGreaterThanOrEqual(3);
+      seen[role] = res.body.data.join("|");
+    }
+    expect(new Set(Object.values(seen)).size).toBe(4); // all four lists differ
+    expect(seen.admin).toMatch(/verify a publisher/i);
+    expect(seen.reader).toMatch(/buy a paid book/i);
+  });
+
+  it("answers an admin's questions about admin tasks", async () => {
+    const suspend = await ask(tokens.admin, "How do I suspend a user?");
+    expect(suspend.body.aiResponse.content).toMatch(/Users/);
+    expect(suspend.body.aiResponse.content).toMatch(/Reinstate/);
+    const verify = await ask(tokens.admin, "How do I verify a publisher?");
+    expect(verify.body.aiResponse.content).toMatch(/official register/i);
+    const audit = await ask(tokens.admin, "What does the audit log record?");
+    expect(audit.body.aiResponse.content).toMatch(/every admin action/i);
+  });
+
+  it("answers a reader about reading, and a publisher about their inbox", async () => {
+    const rate = await ask(tokens.reader, "How do I rate a book?");
+    expect(rate.body.aiResponse.content).toMatch(/stars/i);
+    const library = await ask(tokens.reader, "where is my library");
+    expect(library.body.aiResponse.content).toMatch(/My Library/);
+    const inbox = await ask(tokens.publisher, "where do I see submissions?");
+    expect(inbox.body.aiResponse.content).toMatch(/Submissions/);
+  });
+
+  it("greets each role with questions that fit them", async () => {
+    const admin = await ask(tokens.admin, "hello");
+    expect(admin.body.aiResponse.content).toMatch(/admin/i);
+    expect(admin.body.aiResponse.content).toMatch(/verify a publisher|suspend a user/i);
+    const reader = await ask(tokens.reader, "hello");
+    expect(reader.body.aiResponse.content).toMatch(/reader/i);
+  });
+
+  it("is available to admins in the conversation list too, and keeps each user's chat private", async () => {
+    const a = await request(app).get("/api/messages/conversations").set(auth(tokens.admin));
+    expect(a.body.data[0].partner._id).toBe(AI_BOT_ID);
+    const hist = await request(app).get(`/api/messages/${AI_BOT_ID}`).set(auth(tokens.reader));
+    expect(hist.body.data.map((m) => m.content).join(" ")).not.toMatch(/suspend/i); // admin's questions aren't visible to the reader
+  });
+
+  it("rejects an empty message for every role", async () => {
+    for (const t of Object.values(tokens)) {
+      expect((await ask(t, "   ")).status).toBe(400);
+    }
+  });
+});

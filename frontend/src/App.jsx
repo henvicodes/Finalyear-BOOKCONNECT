@@ -14,6 +14,7 @@ import PrivateRoute from "./components/PrivateRoute";
 import ErrorBoundary from "./components/ErrorBoundary";
 
 import PublicRoute from "./components/PublicRoute";
+import AiAssistantWidget from "./components/AiAssistantWidget";
 
 // Pages
 import HomePage from "./pages/HomePage";
@@ -121,6 +122,8 @@ const AppContent = () => {
         </Routes>
       </main>
       {showNavAndFooter && <Footer />}
+      {/* the assistant is available on every dashboard: reader, author, publisher and admin */}
+      {!showNavAndFooter && <AiAssistantWidget />}
     </div>
   );
 };
