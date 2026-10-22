@@ -54,6 +54,12 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
   const [loadingDiscover, setLoadingDiscover] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedGenre, setSelectedGenre] = useState("");
+  const [discoverSort, setDiscoverSort] = useState("ranked"); // best-rated first, not newest first
+  const [discoverPrice, setDiscoverPrice] = useState(""); // "", "paid" or "free"
+  const [discoverPage, setDiscoverPage] = useState(1);
+  const [discoverTotal, setDiscoverTotal] = useState(0);
+  const [discoverPages, setDiscoverPages] = useState(1);
+  const DISCOVER_PAGE_SIZE = 24;
 
   // Reading Progress states (saved in localStorage)
   const [progresses, setProgresses] = useState(() => {
@@ -190,23 +196,49 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
     }
   };
 
-  const fetchDiscoverBooks = async (genre = "", search = "") => {
-    setLoadingDiscover(true);
+  // Loads one page of the marketplace. Anything not passed uses the current filters,
+  // so callers only say what changed. page > 1 adds to the list ("show more").
+  const fetchDiscoverBooks = async ({
+    genre = selectedGenre,
+    search = searchQuery,
+    sort = discoverSort,
+    price = discoverPrice,
+    page = 1,
+  } = {}) => {
+    setLoadingDiscover(page === 1);
     try {
       const params = new URLSearchParams();
       params.set("status", "published");
+      params.set("limit", String(DISCOVER_PAGE_SIZE));
+      params.set("page", String(page));
+      params.set("sort", sort);
       if (genre) params.set("genre", genre);
       if (search) params.set("search", search);
+      if (price === "paid") params.set("isPaid", "true");
+      if (price === "free") params.set("isPaid", "false");
 
       const { data } = await axios.get(`${BASE_URL}/api/books?${params.toString()}`);
       if (data.success) {
-        setDiscoverBooks(data.data || []);
+        setDiscoverBooks((prev) => (page > 1 ? [...prev, ...(data.data || [])] : data.data || []));
+        setDiscoverPage(page);
+        setDiscoverTotal(data.pagination?.total ?? (data.data || []).length);
+        setDiscoverPages(data.pagination?.pages ?? 1);
       }
     } catch (err) {
       console.error(err);
     } finally {
       setLoadingDiscover(false);
     }
+  };
+
+  const changeSort = (sort) => {
+    setDiscoverSort(sort);
+    fetchDiscoverBooks({ sort });
+  };
+
+  const changePrice = (price) => {
+    setDiscoverPrice(price);
+    fetchDiscoverBooks({ price });
   };
 
   const fetchAuthors = async () => {
@@ -228,12 +260,12 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
 
   const handleSearch = (e) => {
     e.preventDefault();
-    fetchDiscoverBooks(selectedGenre, searchQuery);
+    fetchDiscoverBooks();
   };
 
   const handleGenreChange = (genre) => {
     setSelectedGenre(genre);
-    fetchDiscoverBooks(genre, searchQuery);
+    fetchDiscoverBooks({ genre });
   };
 
   // Purchase/Unlock a paid book — now PIN + MetaMask gated
@@ -261,7 +293,7 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
           updateUserFields({ walletBalance: data.walletBalance });
         }
         fetchLibrary();
-        fetchDiscoverBooks(selectedGenre, searchQuery);
+        fetchDiscoverBooks();
         // If the reader just bought the book they were mid-paywall on,
         // immediately fetch the chapter they were trying to read instead
         // of leaving the "Purchase to continue" screen up.
@@ -440,7 +472,7 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
         if (updatedBookRes.data.success) {
           setSelectedBook(updatedBookRes.data.data);
         }
-        fetchDiscoverBooks(selectedGenre, searchQuery);
+        fetchDiscoverBooks();
       }
     } catch {
       alert("Error submitting rating.");
@@ -467,7 +499,7 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
         if (updatedBookRes.data.success) {
           setSelectedBook(updatedBookRes.data.data);
         }
-        fetchDiscoverBooks(selectedGenre, searchQuery);
+        fetchDiscoverBooks();
       }
     } catch {
       alert("Error submitting review.");
@@ -494,7 +526,7 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
       if (updatedBookRes.data.success) {
         setSelectedBook(updatedBookRes.data.data);
       }
-      fetchDiscoverBooks(selectedGenre, searchQuery);
+      fetchDiscoverBooks();
     } catch {
       alert("Error clearing review.");
     } finally {
@@ -1217,6 +1249,42 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
                     </button>
                   ))}
                 </div>
+
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginTop: 12 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-secondary)" }}>Price</span>
+                  {[["", "All"], ["paid", "Paid"], ["free", "Free"]].map(([value, label]) => (
+                    <button
+                      key={value || "all"}
+                      onClick={() => changePrice(value)}
+                      style={{
+                        padding: "5px 12px",
+                        borderRadius: 20,
+                        border: "1.5px solid var(--accent-100)",
+                        fontSize: 11,
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        background: discoverPrice === value ? "var(--success)" : "#fff",
+                        color: discoverPrice === value ? "#fff" : "var(--text-secondary)"
+                      }}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-secondary)", marginLeft: 8 }}>Sort</span>
+                  <select
+                    value={discoverSort}
+                    onChange={(e) => changeSort(e.target.value)}
+                    className="input-field"
+                    style={{ width: "auto", padding: "5px 10px", fontSize: 12 }}
+                    aria-label="Sort books"
+                  >
+                    <option value="ranked">Top ranked</option>
+                    <option value="-createdAt">Newest</option>
+                    <option value="price">Price: low to high</option>
+                    <option value="-price">Price: high to low</option>
+                    <option value="title">Title A-Z</option>
+                  </select>
+                </div>
               </div>
 
               {/* Marketplace list */}
@@ -1280,6 +1348,19 @@ const ReaderDashboard = ({ user, token, onLogout }) => {
                   })
                 )}
               </div>
+
+              {!loadingDiscover && discoverBooks.length > 0 && (
+                <div style={{ textAlign: "center", marginTop: 20, color: "var(--text-secondary)", fontSize: 12 }}>
+                  Showing {discoverBooks.length} of {discoverTotal} books
+                  {discoverPage < discoverPages && (
+                    <div style={{ marginTop: 10 }}>
+                      <button className="btn-primary" style={{ background: "var(--success)" }} onClick={() => fetchDiscoverBooks({ page: discoverPage + 1 })}>
+                        Show more books
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Book reviews detail panel overlay */}
               {selectedBook && !activeChapterIdx && (

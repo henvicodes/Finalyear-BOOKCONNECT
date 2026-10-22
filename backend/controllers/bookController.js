@@ -13,9 +13,15 @@ const getBooks = async (req, res) => {
       genre,
       page = 1,
       limit = 12,
-      sort = "-createdAt",
+      sort: requestedSort = "-createdAt",
       author,
+      isPaid,
     } = req.query;
+
+    // Only these sort orders are allowed (a free-form sort string would let a client
+    // order by any field, including private ones).
+    const SORTS = ["-createdAt", "createdAt", "price", "-price", "title", "-title", "-averageRating", "-totalReads", "ranked"];
+    const sort = SORTS.includes(requestedSort) ? requestedSort : "-createdAt";
 
     // This public list only ever shows PUBLISHED books. It used to honour a
     // ?status= filter, which let anyone list other people's drafts and
@@ -25,6 +31,13 @@ const getBooks = async (req, res) => {
 
     if (genre) query.genre = genre;
     if (author) query.author = author;
+    // Free / paid filter: ?isPaid=true shows only paid books, ?isPaid=false only free ones
+    if (isPaid === "true") {
+      query.isPaid = true;
+      query.price = { $gt: 0 };
+    } else if (isPaid === "false") {
+      query.$and = [...(query.$and || []), { $or: [{ isPaid: { $ne: true } }, { price: { $not: { $gt: 0 } } }] }];
+    }
     if (typeof search === "string" && search.trim()) {
       // Matched literally: the text is escaped so it can't be used as a regex
       // (injection / catastrophic backtracking).

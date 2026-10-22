@@ -101,3 +101,50 @@ describe("Library books in the public catalogue", () => {
     expect(JSON.stringify(res.body)).not.toMatch(/handsome, clever/);
   });
 });
+
+describe("Marketplace price filter and sorting", () => {
+  beforeAll(async () => {
+    const lib = await User.findOne({ email: "lib-test@example.com" });
+    const mk = (title, isPaid, price, createdAt) =>
+      Book.create({ title, description: "d", genre: "fiction", author: lib._id, status: "published", isPaid, price, createdAt });
+    await mk("Filter Free Old", false, 0, new Date("2026-01-01"));
+    await mk("Filter Paid Cheap", true, 3, new Date("2026-02-01"));
+    await mk("Filter Paid Dear", true, 40, new Date("2026-03-01"));
+    await mk("Filter Free New", false, 0, new Date("2026-09-01"));
+  });
+
+  const titles = (res) => res.body.data.map((b) => b.title);
+
+  it("?isPaid=true returns only paid books, ?isPaid=false only free ones", async () => {
+    const paid = await request(app).get("/api/books?search=Filter&isPaid=true");
+    expect(titles(paid).sort()).toEqual(["Filter Paid Cheap", "Filter Paid Dear"]);
+    const free = await request(app).get("/api/books?search=Filter&isPaid=false");
+    expect(titles(free).sort()).toEqual(["Filter Free New", "Filter Free Old"]);
+    const all = await request(app).get("/api/books?search=Filter");
+    expect(titles(all)).toHaveLength(4);
+  });
+
+  it("sorts by newest and by price", async () => {
+    const newest = await request(app).get("/api/books?search=Filter&sort=-createdAt");
+    expect(titles(newest)[0]).toBe("Filter Free New");
+    const cheap = await request(app).get("/api/books?search=Filter&isPaid=true&sort=price");
+    expect(titles(cheap)).toEqual(["Filter Paid Cheap", "Filter Paid Dear"]);
+    const dear = await request(app).get("/api/books?search=Filter&isPaid=true&sort=-price");
+    expect(titles(dear)).toEqual(["Filter Paid Dear", "Filter Paid Cheap"]);
+  });
+
+  it("ignores a sort field that isn't on the allowed list instead of ordering by it", async () => {
+    const res = await request(app).get("/api/books?search=Filter&sort=password");
+    expect(res.status).toBe(200);
+    expect(titles(res)[0]).toBe("Filter Free New"); // fell back to newest first
+  });
+
+  it("pages through the catalogue", async () => {
+    const p1 = await request(app).get("/api/books?search=Filter&limit=3&page=1&sort=-createdAt");
+    const p2 = await request(app).get("/api/books?search=Filter&limit=3&page=2&sort=-createdAt");
+    expect(titles(p1)).toHaveLength(3);
+    expect(titles(p2)).toHaveLength(1);
+    expect(p1.body.pagination.total).toBe(4);
+    expect(p1.body.pagination.pages).toBe(2);
+  });
+});
