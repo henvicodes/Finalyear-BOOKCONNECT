@@ -55,8 +55,10 @@ const sendRegistrationOTP = async (req, res) => {
     }
 
     // Send OTP via email
+    let emailSent = false;
     try {
       await sendOTPEmail(email, name, otp);
+      emailSent = true;
       console.log("OTP email sent successfully");
     } catch (emailError) {
       console.log("=========================================");
@@ -67,10 +69,12 @@ const sendRegistrationOTP = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: "OTP sent successfully",
+      message: emailSent ? "OTP sent successfully" : "OTP generated successfully",
       data: {
         email,
         expiresIn: "10 minutes",
+        devOtp: process.env.NODE_ENV === "development" || !emailSent ? otp : undefined,
+        emailSent,
       },
     });
   } catch (error) {
@@ -205,8 +209,11 @@ const resendOTP = async (req, res) => {
     await user.save();
 
     // Send new OTP via email
+    let emailSent = false;
     try {
       await sendOTPEmail(email, user.name, otp);
+      emailSent = true;
+      console.log("OTP email resent successfully");
     } catch (emailError) {
       console.log("=========================================");
       console.log(`[DEV MODE ONLY] Failed to resend SMTP email to ${email}`);
@@ -216,10 +223,12 @@ const resendOTP = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: "OTP resent successfully",
+      message: emailSent ? "OTP resent successfully" : "OTP regenerated successfully",
       data: {
         email,
         expiresIn: "10 minutes",
+        devOtp: process.env.NODE_ENV === "development" || !emailSent ? otp : undefined,
+        emailSent,
       },
     });
   } catch (error) {
@@ -313,6 +322,8 @@ const loginUser = async (req, res) => {
         role: user.role,
         profilePicture: user.profilePicture,
         isVerified: user.isVerified,
+        blockchainWallet: user.blockchainWallet,
+        publisherVerification: user.publisherVerification,
         walletBalance: user.walletBalance,
         earnings: user.earnings,
         token: generateToken(user._id, user.role),
@@ -344,6 +355,7 @@ const getUserProfile = async (req, res) => {
         interests: user.interests,
         isVerified: user.isVerified,
         blockchainWallet: user.blockchainWallet,
+        publisherVerification: user.publisherVerification,
         walletBalance: user.walletBalance,
         earnings: user.earnings,
         createdAt: user.createdAt,
@@ -371,6 +383,16 @@ const updateUserProfile = async (req, res) => {
         user.profilePicture = req.body.profilePicture;
       }
 
+      if (req.body.publisherVerification) {
+        user.publisherVerification = {
+          ...user.publisherVerification,
+          ...req.body.publisherVerification,
+        };
+        if (req.body.publisherVerification.isVerified) {
+          user.isVerified = true;
+        }
+      }
+
       const updatedUser = await user.save();
 
       res.json({
@@ -384,6 +406,8 @@ const updateUserProfile = async (req, res) => {
           bio: updatedUser.bio,
           interests: updatedUser.interests,
           isVerified: updatedUser.isVerified,
+          blockchainWallet: updatedUser.blockchainWallet,
+          publisherVerification: updatedUser.publisherVerification,
         },
       });
     } else {

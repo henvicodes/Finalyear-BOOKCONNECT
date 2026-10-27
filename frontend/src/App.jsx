@@ -73,12 +73,22 @@ const AppContent = () => {
             }
           />
 
-          {/* Author only */}
+          {/* Author or Admin */}
           <Route
             path="/upload-book"
             element={
-              <PrivateRoute allowedRoles={["author"]}>
+              <PrivateRoute allowedRoles={["author", "admin"]}>
                 <UploadBookPage />
+              </PrivateRoute>
+            }
+          />
+
+          {/* Admin shortcut route */}
+          <Route
+            path="/admin"
+            element={
+              <PrivateRoute allowedRoles={["admin"]}>
+                <Dashboard />
               </PrivateRoute>
             }
           />

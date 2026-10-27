@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   BookOpen, Menu, X, User, ChevronDown, Settings, LogOut,
-  Search, Filter, Sparkles, Loader, Users
+  Search, Filter, Sparkles, Loader, Users, Shield
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import "../styles/Navbar.css";
@@ -306,7 +306,17 @@ const Navbar = () => {
 
           {isAuthenticated ? (
             <>
-              <li><Link to="/dashboard" onClick={() => setIsOpen(false)}>Dashboard</Link></li>
+              <li>
+                <Link to="/dashboard" onClick={() => setIsOpen(false)}>
+                  {user?.role === "admin" ? (
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, color: "#ef4444", fontWeight: 700 }}>
+                      <Shield size={14} /> Admin Console
+                    </span>
+                  ) : (
+                    "Dashboard"
+                  )}
+                </Link>
+              </li>
               <li className="profile-menu-item" ref={dropdownRef}>
                 <button className="btn-profile-trigger" onClick={() => setProfileOpen(!profileOpen)}>
                   <div className="profile-avatar-sm">

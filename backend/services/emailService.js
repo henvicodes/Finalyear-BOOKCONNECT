@@ -15,7 +15,8 @@ const transporter = nodemailer.createTransport({
 // Verify connection configuration
 transporter.verify(function (error, success) {
   if (error) {
-    console.log("Email server connection error:", error);
+    console.log("Email server notice:", error.message || error);
+    console.log("👉 Tip: For Gmail SMTP, generate a 16-character App Password at https://myaccount.google.com/apppasswords and set EMAIL_PASS in backend/.env.");
   } else {
     console.log("Email server is ready to send messages");
   }

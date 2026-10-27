@@ -6,7 +6,10 @@ const cors = require("cors");
 const connectDB = require("./config/db");
 
 dotenv.config();
-connectDB();
+connectDB().then(() => {
+  const seedAdmin = require("./config/seedAdmin");
+  seedAdmin();
+});
 
 const authRoutes = require("./routes/authRoutes");
 const bookRoutes = require("./routes/bookRoutes");
@@ -15,6 +18,7 @@ const aiRoutes = require("./routes/aiRoutes");
 const blockchainRoutes = require("./routes/blockchainRoutes");
 const chatRoutes = require("./routes/chatRoutes");
 const readerRoutes = require("./routes/readerRoutes");
+const adminRoutes = require("./routes/adminRoutes");
 
 const app = express();
 const server = http.createServer(app);
@@ -82,6 +86,7 @@ app.use("/api/ai", aiRoutes);
 app.use("/api/blockchain", blockchainRoutes);
 app.use("/api/messages", chatRoutes);
 app.use("/api/reader", readerRoutes);
+app.use("/api/admin", adminRoutes);
 
 app.get("/api/health", (_, res) => res.json({ status: "ok" }));
 

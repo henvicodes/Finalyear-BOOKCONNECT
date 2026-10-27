@@ -7,6 +7,7 @@ import {
 import ChatInterface from "../components/ChatInterface";
 import WalletPinModal from "../components/WalletPinModal";
 import { Sparkles } from "lucide-react";  
+import { useAuth } from "../context/AuthContext";
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 // Format helper
@@ -25,6 +26,7 @@ const StatCard = ({ icon, label, value, color }) => (
 
 // ─── PUBLISHER DASHBOARD ─────────────────────────────────────────────────────
 const PublisherDashboard = ({ user, token, onLogout }) => {
+  const { updateUserFields } = useAuth();
   const [activeTab, setActiveTab] = useState("overview");
   const [submissions, setSubmissions] = useState([]);
   const [loadingSubmissions, setLoadingSubmissions] = useState(false);
@@ -33,7 +35,9 @@ const PublisherDashboard = ({ user, token, onLogout }) => {
   // Verification Proof
   const [verifying, setVerifying] = useState(false);
   const [proofDoc, setProofDoc] = useState(user?.publisherVerification?.documentLink || "");
-  const [isVerified, setIsVerified] = useState(user?.publisherVerification?.isVerified || false);
+  const [isVerified, setIsVerified] = useState(
+    Boolean(user?.publisherVerification?.isVerified) || (user?.role === "publisher" && Boolean(user?.isVerified))
+  );
   const [verifyHash, setVerifyHash] = useState(user?.publisherVerification?.blockchainHash || "");
   const [showBalance, setShowBalance] = useState(false);
   const [balancePinOpen, setBalancePinOpen] = useState(false);
@@ -52,9 +56,46 @@ const PublisherDashboard = ({ user, token, onLogout }) => {
   const [aiReport, setAiReport] = useState(null);
 
   useEffect(() => {
+    if (user?.publisherVerification) {
+      const verified = Boolean(user.publisherVerification.isVerified) || (user?.role === "publisher" && Boolean(user?.isVerified));
+      setIsVerified(verified);
+      if (user.publisherVerification.blockchainHash) setVerifyHash(user.publisherVerification.blockchainHash);
+      if (user.publisherVerification.documentLink) setProofDoc(user.publisherVerification.documentLink);
+    } else if (user?.role === "publisher" && user?.isVerified) {
+      setIsVerified(true);
+    }
+  }, [user]);
+
+  useEffect(() => {
     fetchSubmissions();
     fetchAuthors();
+    fetchFreshProfile();
   }, []);
+
+  const fetchFreshProfile = async () => {
+    if (!token) return;
+    try {
+      const { data } = await axios.get(`${BASE_URL}/api/auth/profile`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (data.success && data.data) {
+        const pVer = data.data.publisherVerification;
+        const verified = Boolean(pVer?.isVerified) || (data.data.role === "publisher" && Boolean(data.data.isVerified));
+        setIsVerified(verified);
+        if (pVer?.documentLink) setProofDoc(pVer.documentLink);
+        if (pVer?.blockchainHash) setVerifyHash(pVer.blockchainHash);
+        if (updateUserFields) {
+          updateUserFields({
+            ...data.data,
+            isVerified: verified,
+            publisherVerification: pVer || { isVerified: verified, documentLink: proofDoc, blockchainHash: verifyHash }
+          });
+        }
+      }
+    } catch (err) {
+      console.error("Error refreshing publisher profile:", err);
+    }
+  };
 
   const fetchSubmissions = async () => {
     setLoadingSubmissions(true);
@@ -111,16 +152,17 @@ const PublisherDashboard = ({ user, token, onLogout }) => {
   };
 
   // Submit Publisher Web3 Verification Proof
-  const handleVerifyPublisher = async (e) => {
-    e.preventDefault();
-    if (!proofDoc.trim()) return alert("Please specify a document URL (e.g. Google Doc link)");
+  const handleVerifyPublisher = async (e, customDoc = null) => {
+    if (e && e.preventDefault) e.preventDefault();
+    const docToSubmit = (customDoc || proofDoc || "").trim();
+    if (!docToSubmit) return alert("Please specify a document URL (e.g. Google Doc link)");
     setVerifying(true);
     try {
-      const mockHash = "0x" + Array.from({ length: 40 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
+      const mockHash = "0x" + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
       const { data } = await axios.put(`${BASE_URL}/api/auth/profile`, {
         publisherVerification: {
           isVerified: true,
-          documentLink: proofDoc,
+          documentLink: docToSubmit,
           blockchainHash: mockHash
         }
       }, {
@@ -129,6 +171,18 @@ const PublisherDashboard = ({ user, token, onLogout }) => {
       if (data.success) {
         setIsVerified(true);
         setVerifyHash(mockHash);
+        setProofDoc(docToSubmit);
+        if (updateUserFields) {
+          updateUserFields({
+            ...data.data,
+            isVerified: true,
+            publisherVerification: {
+              isVerified: true,
+              documentLink: docToSubmit,
+              blockchainHash: mockHash
+            }
+          });
+        }
         alert("Publisher credibility successfully locked on Blockchain Ledger!");
       }
     } catch (err) {
@@ -280,13 +334,32 @@ const PublisherDashboard = ({ user, token, onLogout }) => {
       <div className="dashboard-main">
         <header className="dash-topbar" style={{ justifyContent: "flex-end" }}>
           {isVerified ? (
-            <div style={{ display: "flex", alignItems: "center", gap: 6, color: "#10b981", fontSize: 13, fontWeight: "bold" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, color: "#10b981", fontSize: 13, fontWeight: "bold", background: "rgba(16, 185, 129, 0.1)", padding: "6px 14px", borderRadius: 20 }}>
               <Shield size={16} /> Trust Verified Publisher
             </div>
           ) : (
-            <div style={{ display: "flex", alignItems: "center", gap: 6, color: "#f59e0b", fontSize: 13, fontWeight: "bold" }}>
-              <AlertCircle size={16} /> Web3 Credibility Link Pending
-            </div>
+            <button
+              onClick={() => setActiveTab("verification")}
+              title="Click to complete Web3 accreditation verification on blockchain ledger"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                color: "#d97706",
+                background: "#fef3c7",
+                border: "1px solid #fde68a",
+                padding: "6px 14px",
+                borderRadius: 20,
+                fontSize: 13,
+                fontWeight: "bold",
+                cursor: "pointer",
+                transition: "all 0.2s ease"
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "#fde68a"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "#fef3c7"; }}
+            >
+              <AlertCircle size={16} color="#d97706" /> Web3 Credibility Link Pending — Click to Verify
+            </button>
           )}
         </header>
 
@@ -387,8 +460,8 @@ const PublisherDashboard = ({ user, token, onLogout }) => {
                     <p style={{ fontSize: 13, color: "#64748b", marginTop: 8 }}>
                       Your proof doc has been hashed and immutable locked on the blockchain.
                     </p>
-                    <div style={{ marginTop: 16, padding: 12, background: "rgba(0,0,0,0.02)", borderRadius: 8, fontFamily: "monospace", fontSize: 11 }}>
-                      <strong>Accreditation Doc:</strong> {proofDoc}
+                    <div style={{ marginTop: 16, padding: 12, background: "rgba(0,0,0,0.02)", borderRadius: 8, fontFamily: "monospace", fontSize: 11, wordBreak: "break-all" }}>
+                      <strong>Accreditation Doc:</strong> <a href={proofDoc} target="_blank" rel="noreferrer" style={{ color: "#0284c7" }}>{proofDoc}</a>
                       <br />
                       <strong>Ledger Hash:</strong> {verifyHash}
                     </div>
@@ -406,9 +479,24 @@ const PublisherDashboard = ({ user, token, onLogout }) => {
                         onChange={e => setProofDoc(e.target.value)}
                       />
                     </div>
-                    <button type="submit" disabled={verifying} className="btn-primary" style={{ justifyContent: "center" }}>
-                      {verifying ? "Signing Ledger..." : "Register Verification Proof on Blockchain"}
-                    </button>
+                    <div style={{ display: "flex", gap: 10 }}>
+                      <button type="submit" disabled={verifying} className="btn-primary" style={{ flex: 1, justifyContent: "center" }}>
+                        {verifying ? "Signing Ledger..." : "Register Verification Proof on Blockchain"}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={verifying}
+                        className="btn-secondary"
+                        onClick={() => {
+                          const demoDoc = "https://docs.google.com/document/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit";
+                          setProofDoc(demoDoc);
+                          handleVerifyPublisher(null, demoDoc);
+                        }}
+                        style={{ justifyContent: "center", whiteSpace: "nowrap" }}
+                      >
+                        ⚡ 1-Click Fast Verify
+                      </button>
+                    </div>
                   </form>
                 )}
               </div>

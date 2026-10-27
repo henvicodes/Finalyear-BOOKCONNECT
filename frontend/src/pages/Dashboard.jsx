@@ -26,6 +26,7 @@ import {
 } from "./AuthorDashboard";
 import PublisherDashboard from "./PublisherDashboard";
 import ReaderDashboard from "./ReaderDashboard";
+import AdminDashboard from "./AdminDashboard";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
@@ -157,7 +158,7 @@ const Skel = () => (
 import ChatInterface from "../components/ChatInterface";
 
 const Dashboard = () => {
-  const { user, logout, isAuthor, isPublisher, updateUserFields } = useAuth();
+  const { user, logout, isAuthor, isPublisher, isAdmin, updateUserFields } = useAuth();
   const navigate = useNavigate();
   const [active, setActive] = useState("overview");
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -165,7 +166,7 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(false);
   const [editingBookId, setEditingBookId] = useState(null);
 
-  const role  = isAuthor ? "author" : isPublisher ? "publisher" : "reader";
+  const role = isAdmin ? "admin" : isAuthor ? "author" : isPublisher ? "publisher" : "reader";
   const token = user?.token;
   const [payingBookId, setPayingBookId] = useState(null); // holds bookId awaiting PIN
   const [payCostPinOpen, setPayCostPinOpen] = useState(false);
@@ -243,7 +244,11 @@ const Dashboard = () => {
 
   const handleLogout = () => { logout(); navigate("/login"); };
 
-  // Direct delegation to specialized Publisher & Reader dashboards
+  // Direct delegation to specialized Admin, Publisher & Reader dashboards
+  if (role === "admin") {
+    return <AdminDashboard user={user} token={token} onLogout={handleLogout} />;
+  }
+
   if (role === "publisher") {
     return <PublisherDashboard user={user} token={token} onLogout={handleLogout} />;
   }

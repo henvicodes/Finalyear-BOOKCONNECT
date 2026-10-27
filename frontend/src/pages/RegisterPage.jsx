@@ -25,6 +25,7 @@ const RegisterPage = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [showOTP, setShowOTP] = useState(false);
   const [registrationEmail, setRegistrationEmail] = useState("");
+  const [devOtp, setDevOtp] = useState(null);
 
   const { register, login } = useAuth();
   const navigate = useNavigate();
@@ -89,6 +90,7 @@ const RegisterPage = () => {
 
       if (response.data.success) {
         setRegistrationEmail(formData.email);
+        setDevOtp(response.data.data?.devOtp || null);
         setShowOTP(true);
       }
     } catch (error) {
@@ -128,9 +130,12 @@ const RegisterPage = () => {
 
   const handleResendOTP = async () => {
     try {
-      await api.post("/api/auth/resend-otp", {
+      const response = await api.post("/api/auth/resend-otp", {
         email: registrationEmail,
       });
+      if (response.data?.data?.devOtp) {
+        setDevOtp(response.data.data.devOtp);
+      }
     } catch (error) {
       throw new Error(error.response?.data?.message || "Failed to resend OTP");
     }
@@ -139,6 +144,7 @@ const RegisterPage = () => {
   const handleCancelOTP = () => {
     setShowOTP(false);
     setRegistrationEmail("");
+    setDevOtp(null);
   };
 
   return (
@@ -294,6 +300,7 @@ const RegisterPage = () => {
       {showOTP && (
         <OTPVerification
           email={registrationEmail}
+          devOtp={devOtp}
           onVerify={handleVerifyOTP}
           onResend={handleResendOTP}
           onCancel={handleCancelOTP}

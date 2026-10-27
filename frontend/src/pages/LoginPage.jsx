@@ -149,8 +149,22 @@ const LoginPage = () => {
             <span>Demo credentials</span>
           </div>
 
-          <div className="demo-buttons">
+          <div className="demo-buttons" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
             <button
+              type="button"
+              onClick={() => {
+                setFormData({
+                  email: "admin@bookconnect.com",
+                  password: "password123",
+                });
+              }}
+              className="btn-demo"
+              style={{ background: "#dc2626", color: "#fff", border: "none", fontWeight: 700 }}
+            >
+              🛡️ Admin Demo
+            </button>
+            <button
+              type="button"
               onClick={() => {
                 setFormData({
                   email: "author@example.com",
@@ -162,6 +176,19 @@ const LoginPage = () => {
               Author Demo
             </button>
             <button
+              type="button"
+              onClick={() => {
+                setFormData({
+                  email: "submissions@vikramhouse.com",
+                  password: "password123",
+                });
+              }}
+              className="btn-demo"
+            >
+              Publisher Demo
+            </button>
+            <button
+              type="button"
               onClick={() => {
                 setFormData({
                   email: "reader@example.com",
