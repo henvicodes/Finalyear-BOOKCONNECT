@@ -27,7 +27,8 @@ const ProfilePage = () => {
             interests: data.data.interests,
           });
         }
-      } catch (_) {
+      } catch {
+        // The cached profile is shown if the refresh fails.
       } finally {
         setProfileLoading(false);
       }
@@ -40,10 +41,11 @@ const ProfilePage = () => {
     setProfile((prev) => ({ ...prev, profilePicture: newUrl }));
   };
 
+  // Kept consistent with the Dashboard sidebar's role coloring: author = accent, publisher = info, reader = success
   const getRoleColor = () => {
-    if (isAuthor) return "#059669";
-    if (isPublisher) return "#7c3aed";
-    return "#2563eb";
+    if (isAuthor) return "var(--accent-600)";
+    if (isPublisher) return "var(--info)";
+    return "var(--success)";
   };
 
   const getRoleLabel = () => {
@@ -60,7 +62,17 @@ const ProfilePage = () => {
     : "Jan 2026";
 
   // Show the best available profile data
-  const displayUser = { ...user, ...profile };
+  // `profile` is a copy fetched when the page opened, so it goes stale as soon as the
+  // user does something here (links a wallet, sends money). For those fields the live
+  // `user` must win, otherwise linking MetaMask "un-links" itself on screen.
+  const linkedWallet = user?.blockchainWallet?.isLinked ? user.blockchainWallet : profile?.blockchainWallet;
+  const displayUser = {
+    ...user,
+    ...profile,
+    blockchainWallet: linkedWallet || user?.blockchainWallet,
+    walletAddress: user?.walletAddress || profile?.walletAddress,
+    walletBalance: user?.walletBalance ?? profile?.walletBalance,
+  };
 
   return (
     <div className="profile-page">
@@ -68,7 +80,8 @@ const ProfilePage = () => {
       <div
         className="profile-cover"
         style={{
-          background: `linear-gradient(135deg, ${getRoleColor()}18 0%, ${getRoleColor()}32 100%)`,
+          // color-mix replaces the old hex+alpha-suffix trick, which breaks now that getRoleColor() returns a var() reference
+          background: `linear-gradient(135deg, color-mix(in srgb, ${getRoleColor()} 10%, transparent) 0%, color-mix(in srgb, ${getRoleColor()} 20%, transparent) 100%)`,
         }}
       >
         <div className="profile-cover-inner container">

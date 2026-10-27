@@ -1,13 +1,18 @@
 import React, { useState, useRef, useEffect } from "react";
+import axios from "axios";
+import { APP_HEADERS } from "../utils/session";
 import { Link, useNavigate } from "react-router-dom";
 import {
   BookOpen, Menu, X, User, ChevronDown, Settings, LogOut,
   Search, Filter, Sparkles, Loader, Users, Shield
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import ThemeToggle from "./ThemeToggle";
 import "../styles/Navbar.css";
+import { authorOf } from "../utils/bookDisplay";
 
-const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+import { API_URL } from "../config";
+const BASE_URL = API_URL;
 
 const GENRES = ["Fiction","Non-Fiction","Science","Technology","History","Poetry","Romance","Thriller"];
 const TYPES  = ["Free","Paid"];
@@ -54,12 +59,12 @@ const SearchBar = () => {
         const params = new URLSearchParams({ search: query, limit: 4 });
         if (filters.genre) params.append("genre", filters.genre.toLowerCase());
         if (filters.type)  params.append("isPaid", filters.type === "Paid" ? "true" : "false");
-        const token = JSON.parse(localStorage.getItem("user") || "{}").token;
-        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        // Auth is the httpOnly session cookie, sent via credentials: "include".
+        const opts = { credentials: "include", headers: APP_HEADERS };
 
         const [booksRes, usersRes] = await Promise.all([
-          fetch(`${BASE_URL}/api/books?${params}`, { headers }).then(r => r.json()).catch(() => ({ data: [] })),
-          fetch(`${BASE_URL}/api/auth/search?q=${query}`, { headers }).then(r => r.json()).catch(() => ({ data: [] })),
+          fetch(`${BASE_URL}/api/books?${params}`, opts).then(r => r.json()).catch(() => ({ data: [] })),
+          fetch(`${BASE_URL}/api/auth/search?q=${encodeURIComponent(query)}`, opts).then(r => r.json()).catch(() => ({ data: [] })),
         ]);
         setBooks(booksRes.data?.slice(0, 4) || []);
         setAuthors(usersRes.data?.slice(0, 3) || []);
@@ -69,24 +74,8 @@ const SearchBar = () => {
       // AI recommendations
       setAiLoading(true);
       try {
-        const res = await fetch("https://api.anthropic.com/v1/messages", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            model: "claude-sonnet-4-20250514",
-            max_tokens: 500,
-            messages: [{
-              role: "user",
-              content: `You are a book recommendation assistant for BookConnect, an Indian digital publishing platform.
-User searched: "${query}". Filters: ${JSON.stringify(filters)}.
-Reply ONLY valid JSON (no markdown):
-{"intent":"one sentence what user wants","suggestions":["s1","s2","s3"],"recommendations":[{"title":"T","author":"A","genre":"G","reason":"R"},{"title":"T","author":"A","genre":"G","reason":"R"}]}`
-            }]
-          })
-        });
-        const data   = await res.json();
-        const text   = data.content?.[0]?.text?.replace(/```json|```/g, "").trim() || "{}";
-        const parsed = JSON.parse(text);
+        const { data } = await axios.post(`${BASE_URL}/api/ai/search-assist`, { query, filters });
+        const parsed = data.available ? data : {};
         setIntent(parsed.intent || "");
         setAiSuggestions(parsed.suggestions || []);
         setAiRecs(parsed.recommendations || []);
@@ -215,7 +204,7 @@ Reply ONLY valid JSON (no markdown):
                   <div className="sb-info">
                     <div className="sb-ititle">{b.title}</div>
                     <div className="sb-isub">
-                      by {b.author?.name || "Unknown"}{b.genre ? ` · ${b.genre}` : ""}{b.isPaid ? " · Paid" : " · Free"}
+                      by {authorOf(b) || "Unknown"}{b.genre ? ` · ${b.genre}` : ""}{b.isPaid ? " · Paid" : " · Free"}
                     </div>
                   </div>
                   {b.averageRating > 0 && <span className="sb-rating">⭐ {b.averageRating?.toFixed(1)}</span>}
@@ -290,10 +279,12 @@ const Navbar = () => {
           <BookOpen /><span>BookConnect</span>
         </Link>
 
-        {/* Search bar — center */}
-        <div className="navbar-search">
-          <SearchBar />
-        </div>
+        {/* Search bar — center (signed-in users only; nothing to search before you're in) */}
+        {isAuthenticated && (
+          <div className="navbar-search">
+            <SearchBar />
+          </div>
+        )}
 
         <button className="mobile-menu-btn" onClick={() => setIsOpen(!isOpen)}>
           {isOpen ? <X /> : <Menu />}
@@ -349,6 +340,8 @@ const Navbar = () => {
                       <Settings size={15} /><span>Edit Profile</span>
                     </Link>
                     <div className="dropdown-divider" />
+                    <ThemeToggle variant="icon" className="dropdown-item" />
+                    <div className="dropdown-divider" />
                     <button className="dropdown-item danger" onClick={handleLogout}>
                       <LogOut size={15} /><span>Logout</span>
                     </button>
@@ -366,9 +359,11 @@ const Navbar = () => {
       </div>
 
       {/* Mobile search */}
-      <div className="navbar-search-mobile">
-        <SearchBar />
-      </div>
+      {isAuthenticated && (
+        <div className="navbar-search-mobile">
+          <SearchBar />
+        </div>
+      )}
     </nav>
   );
 };

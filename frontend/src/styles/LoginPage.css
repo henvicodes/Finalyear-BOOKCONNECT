@@ -1,11 +1,8 @@
 .login-container {
-  min-height: 100vh;
-  background: linear-gradient(
-    135deg,
-    var(--primary-bg) 0%,
-    white 50%,
-    #f5f0ff 100%
-  );
+  min-height: calc(100vh - 68px);
+  background:
+    radial-gradient(circle at 20% 10%, var(--accent-50) 0%, transparent 40%),
+    var(--bg-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -18,7 +15,7 @@
   background: var(--bg-primary);
   padding: 2.5rem;
   border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-xl);
+  box-shadow: var(--shadow-lg);
   border: 1px solid var(--border-light);
 }
 
@@ -66,8 +63,8 @@
 
 /* Error Message */
 .error-message {
-  background: #fef2f2;
-  border-left: 4px solid #ef4444;
+  background: var(--danger-bg);
+  border-left: 4px solid var(--danger);
   padding: 1rem;
   border-radius: var(--radius-md);
   margin-bottom: 1.5rem;
@@ -77,11 +74,11 @@
 }
 
 .error-message svg {
-  color: #ef4444;
+  color: var(--danger);
 }
 
 .error-message p {
-  color: #b91c1c;
+  color: var(--danger);
   font-size: 0.875rem;
 }
 
@@ -127,16 +124,16 @@
 
 .input-wrapper input:focus {
   outline: none;
-  border-color: var(--primary-color);
-  box-shadow: 0 0 0 3px var(--primary-bg);
+  border-color: var(--accent-500);
+  box-shadow: var(--shadow-focus);
 }
 
 .input-wrapper input.error {
-  border-color: #ef4444;
+  border-color: var(--danger);
 }
 
 .input-error {
-  color: #ef4444;
+  color: var(--danger);
   font-size: 0.75rem;
   margin-top: 0.25rem;
 }
@@ -270,4 +267,18 @@
   .demo-buttons {
     grid-template-columns: 1fr;
   }
+}
+
+.logo-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 2rem;
+  width: 100%;
+}
+
+.sidebar-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }

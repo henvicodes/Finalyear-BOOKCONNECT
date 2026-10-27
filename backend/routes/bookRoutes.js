@@ -15,13 +15,19 @@ const {
   updateChapter,
   deleteChapter,
 } = require("../controllers/bookController.js");
-const { protect, authorize } = require("../middleware/authMiddleware");
+const { protect, authorize, optionalAuth } = require("../middleware/authMiddleware");
 
 // Public
 router.get("/", getBooks);
-router.get("/:id", getBookById);
+// optionalAuth: lets getBookById recognize the book's own author (who
+// still needs full chapter content to edit it) while staying open to
+// anonymous browsing for everyone else.
+router.get("/:id", optionalAuth, getBookById);
 router.get("/:id/chapters", getBookChapters);
-router.get("/:id/chapters/:chapterId", getChapterContent);
+// optionalAuth: chapter text itself is gated by purchase for paid books
+// (see getChapterContent), but the route stays open to anonymous readers
+// so free books still work without forcing a login wall.
+router.get("/:id/chapters/:chapterId", optionalAuth, getChapterContent);
 
 // Author only
 router.get("/user/my-books", protect, authorize("author"), getMyBooks);

@@ -10,7 +10,7 @@ const Footer = () => {
         <div className="footer-section">
           <h3 style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             <BookOpen />
-            LiteraryPlatform
+            BookConnect
           </h3>
           <p>
             Blockchain-enabled AI-powered digital publishing platform for secure

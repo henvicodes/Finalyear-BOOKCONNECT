@@ -20,9 +20,10 @@ import {
 } from "lucide-react";
 import { initSocket, getSocket } from "../services/socket";
 import WalletPinModal from "./WalletPinModal";
-import { sendMetaMaskTransaction } from "../services/web3";
+import { payOnChainIfLinked } from "../services/chainPayment";
 
-const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+import { API_URL } from "../config";
+const BASE_URL = API_URL;
 const AI_BOT_ID = "0000000000000000000000aa";
 
 const AI_BOT_USER = {
@@ -33,7 +34,7 @@ const AI_BOT_USER = {
   isAi: true
 };
 
-const ChatInterface = ({ user, currentRole, token }) => {
+const ChatInterface = ({ user, currentRole, token, initialContact }) => {
   const [conversations, setConversations] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
@@ -65,11 +66,9 @@ const ChatInterface = ({ user, currentRole, token }) => {
   // 1. Initialize Socket.io connection & fetch conversations on mount
   useEffect(() => {
     if (user?._id) {
-      const socket = initSocket(user._id);
-
-      socket.on("connect", () => {
-        socket.emit("join_room", user._id);
-      });
+      // The server reads who we are from the login token sent in the handshake.
+      const socket = initSocket();
+      if (!socket) return undefined;
 
       socket.on("online_users", (users) => {
         setOnlineUsers(users);
@@ -140,6 +139,15 @@ const ChatInterface = ({ user, currentRole, token }) => {
     fetchConversations();
   }, []);
 
+  // If opened with a specific contact in mind (e.g. "Message" from the
+  // matching page), select them once conversations have loaded, overriding
+  // fetchConversations' own default-to-first-contact behavior.
+  useEffect(() => {
+    if (initialContact) {
+      setSelectedContact(initialContact);
+    }
+  }, [initialContact]);
+
   // Fetch messages when contact changes
   useEffect(() => {
     if (selectedContact) {
@@ -174,7 +182,11 @@ const ChatInterface = ({ user, currentRole, token }) => {
       });
       if (data.success) {
         setConversations(data.data);
-        if (!selectedContact && data.data.length > 0) {
+        // Use the ref, not the `selectedContact` state, here: this function is called from
+        // Socket.io listeners registered once on mount, so their closure over `selectedContact`
+        // is permanently stale (always null) and would otherwise force-reset the open
+        // conversation back to whatever's first in the list every time a message is sent/received.
+        if (!selectedContactRef.current && data.data.length > 0) {
           setSelectedContact(data.data[0].partner);
         }
       }
@@ -395,35 +407,35 @@ const ChatInterface = ({ user, currentRole, token }) => {
     setPayCostPinOpen(true);
   };
 
-  const handlePayCostAfterPin = async () => {
+  const handlePayCostAfterPin = async (pin) => {
     const bookId = payingBookId;
     setPayCostPinOpen(false);
     setPayingBookId(null);
     try {
-      const publisherWalletAddr =
-        payingBook?.publisher?.blockchainWallet?.address ||
-        payingBook?.publisher?.walletAddress ||
-        "0x0000000000000000000000000000000000000000";
       const publishingCost = payingBook?.publishingCost || 0;
 
       let txHash = "";
-      if (publishingCost > 0) {
-        const ethVal = (publishingCost * 0.0001).toFixed(5);
-        try {
-          txHash = await sendMetaMaskTransaction(publisherWalletAddr, ethVal);
-        } catch (metamaskErr) {
-          alert("MetaMask transaction failed: " + metamaskErr.message);
-          return;
-        }
+      try {
+        ({ txHash } = await payOnChainIfLinked({
+          payer: user,
+          receiver: payingBook?.publisher,
+          amountUsd: publishingCost,
+          purpose: "publishing_fee",
+        }));
+      } catch (metamaskErr) {
+        alert("MetaMask transaction failed: " + metamaskErr.message);
+        return;
       }
 
       const res = await axios.post(
         `${BASE_URL}/api/manuscripts/${bookId}/pay-cost`,
-        { txHash },
+        { txHash, pin },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (res.data.success) {
-        alert(`Payment verified on Blockchain ledger${txHash ? " (Tx: " + txHash.slice(0, 12) + "...)" : ""}. Book published successfully!`);
+        const note = res.data.chainWarning ? `
+(${res.data.chainWarning})` : "";
+        alert(`Payment complete${txHash ? " (Tx: " + txHash.slice(0, 12) + "...)" : ""}. Book published successfully!${note}`);
         fetchMessages(selectedContact._id);
       }
     } catch (err) {
@@ -439,10 +451,10 @@ const ChatInterface = ({ user, currentRole, token }) => {
   };
 
   const getRoleColor = (role) => {
-    if (role === "publisher") return "#0369a1";
-    if (role === "author") return "#7c3aed";
+    if (role === "publisher") return "var(--info)";
+    if (role === "author") return "var(--accent-600)";
     if (role === "ai_bot") return "#ec4899";
-    return "#059669";
+    return "var(--success)";
   };
 
   return (
@@ -452,13 +464,13 @@ const ChatInterface = ({ user, currentRole, token }) => {
       <div className="glass-panel" style={{ width: 320, display: "flex", flexDirection: "column", padding: 0, overflow: "hidden" }}>
         
         {/* Header & Search Bar */}
-        <div style={{ padding: "16px 20px", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(15, 23, 42, 0.4)" }}>
-          <h3 style={{ fontSize: 16, fontWeight: 700, margin: "0 0 12px 0", color: "#f8fafc", display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ padding: "16px 20px", borderBottom: "1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)", background: "var(--gray-100)" }}>
+          <h3 style={{ fontSize: 16, fontWeight: 700, margin: "0 0 12px 0", color: "var(--text-primary)", display: "flex", alignItems: "center", gap: 8 }}>
             <span>Messages & AI Assistant</span>
           </h3>
 
           <div style={{ position: "relative" }}>
-            <Search size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#94a3b8" }} />
+            <Search size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
             <input
               type="text"
               placeholder="Search people or AI Assistant..."
@@ -467,16 +479,16 @@ const ChatInterface = ({ user, currentRole, token }) => {
               style={{
                 width: "100%",
                 padding: "8px 12px 8px 34px",
-                background: "rgba(255,255,255,0.05)",
-                border: "1px solid rgba(255,255,255,0.1)",
+                background: "color-mix(in srgb, var(--text-primary) 4%, transparent)",
+                border: "1px solid color-mix(in srgb, var(--text-primary) 8%, transparent)",
                 borderRadius: 8,
-                color: "#fff",
+                color: "var(--text-primary)",
                 fontSize: 12,
                 outline: "none"
               }}
             />
             {searchQuery && (
-              <X size={14} onClick={() => setSearchQuery("")} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", cursor: "pointer", color: "#94a3b8" }} />
+              <X size={14} onClick={() => setSearchQuery("")} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", cursor: "pointer", color: "var(--text-muted)" }} />
             )}
           </div>
         </div>
@@ -485,11 +497,11 @@ const ChatInterface = ({ user, currentRole, token }) => {
         <div style={{ flex: 1, overflowY: "auto" }}>
           {searchQuery ? (
             <div style={{ padding: 8 }}>
-              <div style={{ fontSize: 11, fontWeight: "bold", textTransform: "uppercase", color: "#94a3b8", padding: "8px 12px" }}>
+              <div style={{ fontSize: 11, fontWeight: "bold", textTransform: "uppercase", color: "var(--text-muted)", padding: "8px 12px" }}>
                 Search Results
               </div>
               {searchResults.length === 0 ? (
-                <div style={{ fontSize: 12, color: "#64748b", padding: 12, textAlign: "center" }}>No users found matching "{searchQuery}"</div>
+                <div style={{ fontSize: 12, color: "var(--text-secondary)", padding: 12, textAlign: "center" }}>No users found matching "{searchQuery}"</div>
               ) : (
                 searchResults.map(u => (
                   <div
@@ -502,7 +514,7 @@ const ChatInterface = ({ user, currentRole, token }) => {
                       display: "flex",
                       alignItems: "center",
                       gap: 12,
-                      background: "rgba(255,255,255,0.03)",
+                      background: "color-mix(in srgb, var(--text-primary) 2%, transparent)",
                       marginBottom: 6
                     }}
                   >
@@ -521,8 +533,8 @@ const ChatInterface = ({ user, currentRole, token }) => {
                       {u.isAi ? <Bot size={18} /> : u.name[0]?.toUpperCase()}
                     </div>
                     <div>
-                      <div style={{ fontSize: 13, fontWeight: "bold", color: "#f1f5f9" }}>{u.name}</div>
-                      <div style={{ fontSize: 10, color: "#94a3b8", textTransform: "capitalize" }}>{u.role === "ai_bot" ? "AI Assistant" : u.role}</div>
+                      <div style={{ fontSize: 13, fontWeight: "bold", color: "var(--text-primary)" }}>{u.name}</div>
+                      <div style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "capitalize" }}>{u.role === "ai_bot" ? "AI Assistant" : u.role}</div>
                     </div>
                   </div>
                 ))
@@ -532,15 +544,19 @@ const ChatInterface = ({ user, currentRole, token }) => {
             <div>
               {loadingContacts ? (
                 <div style={{ display: "flex", justifyContent: "center", padding: 30 }}>
-                  <RefreshCw className="animate-spin" size={18} color="#94a3b8" />
+                  <RefreshCw className="animate-spin" size={18} color="var(--text-muted)" />
                 </div>
               ) : conversations.length === 0 ? (
-                <div style={{ fontSize: 12, color: "#94a3b8", padding: 20, textAlign: "center" }}>
+                <div style={{ fontSize: 12, color: "var(--text-muted)", padding: 20, textAlign: "center" }}>
                   No active conversations yet. Search users above to start messaging!
                 </div>
               ) : (
-                conversations.map((c) => {
+                conversations.map((c, _i, all) => {
                   const partner = c.partner;
+                  // two people can share a name (only e-mail is unique), so show the e-mail
+                  // under the name whenever the list has another contact called the same
+                  const sameNameCount = all.filter((o) => !o.partner.isAi && o.partner.name?.toLowerCase() === partner.name?.toLowerCase()).length;
+                  const showEmail = !partner.isAi && sameNameCount > 1 && partner.email;
                   const isSelected = selectedContact?._id === partner._id;
                   const isOnline = onlineUsers.includes(partner._id);
 
@@ -550,9 +566,9 @@ const ChatInterface = ({ user, currentRole, token }) => {
                       onClick={() => selectUserToChat(partner)}
                       style={{
                         padding: "14px 18px",
-                        borderBottom: "1px solid rgba(255,255,255,0.04)",
+                        borderBottom: "1px solid color-mix(in srgb, var(--text-primary) 3%, transparent)",
                         cursor: "pointer",
-                        background: isSelected ? "rgba(255,255,255,0.06)" : "transparent",
+                        background: isSelected ? "color-mix(in srgb, var(--text-primary) 6%, transparent)" : "transparent",
                         borderLeft: isSelected ? `4px solid ${getRoleColor(partner.role)}` : "4px solid transparent",
                         display: "flex",
                         alignItems: "center",
@@ -583,20 +599,20 @@ const ChatInterface = ({ user, currentRole, token }) => {
                             width: 10,
                             height: 10,
                             borderRadius: "50%",
-                            background: "#10b981",
-                            border: "2px solid #0f172a"
+                            background: "var(--success)",
+                            border: "2px solid var(--bg-primary)"
                           }} />
                         )}
                       </div>
 
                       <div style={{ flex: 1, overflow: "hidden" }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                          <span style={{ fontSize: 13, fontWeight: "bold", color: "#f8fafc", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          <span style={{ fontSize: 13, fontWeight: "bold", color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                             {partner.name}
                           </span>
                           {c.unreadCount > 0 && (
                             <span style={{
-                              background: "#ef4444",
+                              background: "var(--danger)",
                               color: "#fff",
                               fontSize: 10,
                               fontWeight: "bold",
@@ -608,11 +624,16 @@ const ChatInterface = ({ user, currentRole, token }) => {
                           )}
                         </div>
 
+                        {showEmail && (
+                          <div style={{ fontSize: 10, color: "var(--text-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                            {partner.email}
+                          </div>
+                        )}
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 2 }}>
-                          <span style={{ fontSize: 11, color: "#94a3b8", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 160 }}>
+                          <span style={{ fontSize: 11, color: "var(--text-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 160 }}>
                             {c.lastMessage?.content || "No messages yet"}
                           </span>
-                          <span style={{ fontSize: 9, color: "#64748b" }}>
+                          <span style={{ fontSize: 9, color: "var(--text-secondary)" }}>
                             {partner.isAi ? "AI" : partner.role}
                           </span>
                         </div>
@@ -631,7 +652,7 @@ const ChatInterface = ({ user, currentRole, token }) => {
         {selectedContact ? (
           <>
             {/* Header */}
-            <div style={{ padding: "14px 24px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "space-between", background: "rgba(15, 23, 42, 0.3)" }}>
+            <div style={{ padding: "14px 24px", borderBottom: "1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)", display: "flex", alignItems: "center", justifyContent: "space-between", background: "var(--gray-50)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                 <div style={{ position: "relative" }}>
                   <div style={{
@@ -655,15 +676,15 @@ const ChatInterface = ({ user, currentRole, token }) => {
                       width: 10,
                       height: 10,
                       borderRadius: "50%",
-                      background: "#10b981",
-                      border: "2px solid #0f172a"
+                      background: "var(--success)",
+                      border: "2px solid var(--bg-primary)"
                     }} />
                   )}
                 </div>
 
                 <div>
-                  <span style={{ display: "block", fontSize: 14, fontWeight: "bold", color: "#f8fafc" }}>{selectedContact.name}</span>
-                  <span style={{ display: "block", fontSize: 11, color: partnerTyping ? "#a7f3d0" : onlineUsers.includes(selectedContact._id) ? "#10b981" : "#94a3b8" }}>
+                  <span style={{ display: "block", fontSize: 14, fontWeight: "bold", color: "var(--text-primary)" }}>{selectedContact.name}</span>
+                  <span style={{ display: "block", fontSize: 11, color: partnerTyping ? "var(--success)" : onlineUsers.includes(selectedContact._id) ? "var(--success)" : "var(--text-muted)" }}>
                     {partnerTyping ? "typing..." : selectedContact.isAi ? "AI Assistant (Always Online)" : onlineUsers.includes(selectedContact._id) ? "Online" : "Offline"}
                   </span>
                 </div>
@@ -676,9 +697,9 @@ const ChatInterface = ({ user, currentRole, token }) => {
                     onClick={() => setProposeCostOpen(!proposeCostOpen)}
                     style={{
                       padding: "6px 12px",
-                      background: "rgba(3, 105, 161, 0.15)",
-                      color: "#38bdf8",
-                      border: "1px solid rgba(56, 189, 248, 0.3)",
+                      background: "rgba(8, 145, 178, 0.15)",
+                      color: "var(--info)",
+                      border: "1px solid rgba(8, 145, 178, 0.3)",
                       borderRadius: 8,
                       fontSize: 12,
                       fontWeight: 600,
@@ -695,7 +716,7 @@ const ChatInterface = ({ user, currentRole, token }) => {
                 {/* Options Dropdown Menu */}
                 <button
                   onClick={() => setHeaderMenuOpen(!headerMenuOpen)}
-                  style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", padding: 6 }}
+                  style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", padding: 6 }}
                 >
                   <MoreVertical size={18} />
                 </button>
@@ -705,10 +726,10 @@ const ChatInterface = ({ user, currentRole, token }) => {
                     position: "absolute",
                     right: 0,
                     top: 40,
-                    background: "#1e293b",
-                    border: "1px solid rgba(255,255,255,0.1)",
+                    background: "var(--bg-primary)",
+                    border: "1px solid color-mix(in srgb, var(--text-primary) 8%, transparent)",
                     borderRadius: 8,
-                    boxShadow: "0 10px 25px rgba(0,0,0,0.5)",
+                    boxShadow: "0 10px 25px rgba(0,0,0,0.16)",
                     zIndex: 50,
                     minWidth: 180,
                     overflow: "hidden"
@@ -720,7 +741,7 @@ const ChatInterface = ({ user, currentRole, token }) => {
                         padding: "10px 14px",
                         background: "none",
                         border: "none",
-                        color: "#ef4444",
+                        color: "var(--danger)",
                         textAlign: "left",
                         fontSize: 12,
                         fontWeight: 600,
@@ -739,9 +760,9 @@ const ChatInterface = ({ user, currentRole, token }) => {
 
             {/* Propose Cost Form Panel */}
             {proposeCostOpen && (
-              <div style={{ padding: 16, background: "rgba(3, 105, 161, 0.12)", borderBottom: "1px solid rgba(3, 105, 161, 0.2)" }}>
+              <div style={{ padding: 16, background: "rgba(8, 145, 178, 0.12)", borderBottom: "1px solid rgba(8, 145, 178, 0.2)" }}>
                 <form onSubmit={handleProposeCostSubmit} style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                  <span style={{ fontSize: 12, fontWeight: "bold", color: "#38bdf8" }}>Proposed Fee ($):</span>
+                  <span style={{ fontSize: 12, fontWeight: "bold", color: "var(--info)" }}>Proposed Fee ($):</span>
                   <input
                     type="number"
                     required
@@ -750,27 +771,27 @@ const ChatInterface = ({ user, currentRole, token }) => {
                     onChange={e => setProposedCost(e.target.value)}
                     style={{
                       padding: "6px 12px",
-                      background: "rgba(255,255,255,0.05)",
-                      border: "1px solid rgba(255,255,255,0.1)",
+                      background: "color-mix(in srgb, var(--text-primary) 4%, transparent)",
+                      border: "1px solid color-mix(in srgb, var(--text-primary) 8%, transparent)",
                       borderRadius: 6,
-                      color: "#fff",
+                      color: "var(--text-primary)",
                       width: 120
                     }}
                   />
                   <button type="submit" className="btn-primary" style={{ padding: "6px 16px", fontSize: 12 }}>Send Proposal</button>
-                  <button type="button" onClick={() => setProposeCostOpen(false)} style={{ background: "none", border: "none", color: "#94a3b8", fontSize: 12, cursor: "pointer" }}>Cancel</button>
+                  <button type="button" onClick={() => setProposeCostOpen(false)} style={{ background: "none", border: "none", color: "var(--text-muted)", fontSize: 12, cursor: "pointer" }}>Cancel</button>
                 </form>
               </div>
             )}
 
             {/* Messages Content */}
-            <div style={{ flex: 1, padding: 24, overflowY: "auto", display: "flex", flexDirection: "column", gap: 16, background: "rgba(0,0,0,0.1)" }}>
+            <div style={{ flex: 1, padding: 24, overflowY: "auto", display: "flex", flexDirection: "column", gap: 16, background: "var(--gray-50)" }}>
               {loadingMessages ? (
                 <div style={{ display: "flex", justifyContent: "center", padding: 30 }}>
-                  <RefreshCw className="animate-spin" size={24} color="#94a3b8" />
+                  <RefreshCw className="animate-spin" size={24} color="var(--text-muted)" />
                 </div>
               ) : messages.length === 0 ? (
-                <div style={{ textAlign: "center", color: "#64748b", padding: 40, fontSize: 13 }}>
+                <div style={{ textAlign: "center", color: "var(--text-secondary)", padding: 40, fontSize: 13 }}>
                   {selectedContact.isAi
                     ? "Ask BookConnect AI Assistant anything about book writing, summaries, or publishing!"
                     : "No messages yet. Send a message to start the conversation!"}
@@ -787,18 +808,18 @@ const ChatInterface = ({ user, currentRole, token }) => {
                     return (
                       <div key={msg._id || i} style={{ display: "flex", justifyContent: "center", margin: "8px 0" }}>
                         <div style={{
-                          background: isProposal ? "rgba(245, 158, 11, 0.1)" : isPayment ? "rgba(16, 185, 129, 0.1)" : "rgba(255,255,255,0.03)",
-                          border: isProposal ? "1px solid rgba(245, 158, 11, 0.25)" : isPayment ? "1px solid rgba(16, 185, 129, 0.25)" : "1px solid rgba(255,255,255,0.05)",
+                          background: isProposal ? "rgba(217, 119, 6, 0.1)" : isPayment ? "rgba(22, 163, 74, 0.1)" : "color-mix(in srgb, var(--text-primary) 2%, transparent)",
+                          border: isProposal ? "1px solid rgba(217, 119, 6, 0.25)" : isPayment ? "1px solid rgba(22, 163, 74, 0.25)" : "1px solid color-mix(in srgb, var(--text-primary) 4%, transparent)",
                           padding: "12px 18px",
                           borderRadius: 12,
                           maxWidth: "80%",
                           textAlign: "center",
                           fontSize: "0.82rem",
-                          color: "#cbd5e1"
+                          color: "var(--text-secondary)"
                         }}>
                           {isProposal ? (
                             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-                              <Clock size={16} color="#f59e0b" />
+                              <Clock size={16} color="var(--warning)" />
                               <strong>{msg.content}</strong>
                               {currentRole === "author" && msg.book && msg.book.status === "cost_proposed" && (
                                 <button
@@ -806,7 +827,7 @@ const ChatInterface = ({ user, currentRole, token }) => {
                                   style={{
                                     marginTop: 6,
                                     padding: "6px 16px",
-                                    background: "linear-gradient(135deg, #10b981 0%, #059669 100%)",
+                                    background: "linear-gradient(135deg, var(--success) 0%, var(--success) 100%)",
                                     color: "#fff",
                                     border: "none",
                                     borderRadius: 6,
@@ -823,7 +844,7 @@ const ChatInterface = ({ user, currentRole, token }) => {
                             </div>
                           ) : isPayment ? (
                             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-                              <CheckCircle size={16} color="#10b981" />
+                              <CheckCircle size={16} color="var(--success)" />
                               <strong>{msg.content}</strong>
                             </div>
                           ) : (
@@ -861,19 +882,19 @@ const ChatInterface = ({ user, currentRole, token }) => {
                             top: -12,
                             right: isMe ? 0 : "auto",
                             left: isMe ? "auto" : 0,
-                            background: "#1e293b",
-                            border: "1px solid rgba(255,255,255,0.15)",
+                            background: "var(--bg-primary)",
+                            border: "1px solid color-mix(in srgb, var(--text-primary) 10%, transparent)",
                             borderRadius: 6,
                             padding: "2px 4px",
                             display: "flex",
                             gap: 4,
                             zIndex: 10,
-                            boxShadow: "0 4px 12px rgba(0,0,0,0.4)"
+                            boxShadow: "0 4px 12px rgba(0,0,0,0.14)"
                           }}>
                             <button
                               title="Delete for me"
                               onClick={() => handleDeleteMessage(msg._id, "me")}
-                              style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", padding: "2px 4px" }}
+                              style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", padding: "2px 4px" }}
                             >
                               <Trash2 size={12} />
                             </button>
@@ -881,7 +902,7 @@ const ChatInterface = ({ user, currentRole, token }) => {
                               <button
                                 title="Delete for everyone"
                                 onClick={() => handleDeleteMessage(msg._id, "everyone")}
-                                style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", padding: "2px 4px", fontSize: 10, fontWeight: "bold" }}
+                                style={{ background: "none", border: "none", color: "var(--danger)", cursor: "pointer", padding: "2px 4px", fontSize: 10, fontWeight: "bold" }}
                               >
                                 Everyone
                               </button>
@@ -892,25 +913,26 @@ const ChatInterface = ({ user, currentRole, token }) => {
                         <div
                           style={{
                             background: isDeleted
-                              ? "rgba(255,255,255,0.04)"
+                              ? "color-mix(in srgb, var(--text-primary) 3%, transparent)"
                               : isMe
-                              ? `linear-gradient(135deg, ${getRoleColor(currentRole)} 0%, #4c1d95 100%)`
+                              ? `linear-gradient(135deg, ${getRoleColor(currentRole)} 0%, var(--accent-700) 100%)`
                               : selectedContact.isAi
                               ? "rgba(236, 72, 153, 0.12)"
-                              : "#1e293b",
-                            color: isDeleted ? "#94a3b8" : "#f8fafc",
+                              : "var(--gray-100)",
+                            // own-message bubble keeps a colored gradient bg regardless of page theme, so it needs light text; other bubbles are now light and need dark text
+                            color: isDeleted ? "var(--text-muted)" : isMe ? "#fff" : "var(--text-primary)",
                             padding: "12px 16px",
                             borderRadius: isMe ? "14px 14px 2px 14px" : "14px 14px 14px 2px",
                             fontSize: "0.88rem",
                             lineHeight: 1.5,
                             fontStyle: isDeleted ? "italic" : "normal",
                             border: isDeleted
-                              ? "1px dashed rgba(255,255,255,0.15)"
+                              ? "1px dashed color-mix(in srgb, var(--text-primary) 10%, transparent)"
                               : isMe
                               ? "none"
                               : selectedContact.isAi
                               ? "1px solid rgba(236, 72, 153, 0.3)"
-                              : "1px solid rgba(255,255,255,0.06)"
+                              : "1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)"
                           }}
                         >
                           {msg.isAi && !isMe && (
@@ -921,10 +943,10 @@ const ChatInterface = ({ user, currentRole, token }) => {
 
                           {msg.content}
 
-                          <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 4, marginTop: 4, fontSize: 10, color: isMe ? "rgba(255,255,255,0.6)" : "#64748b" }}>
+                          <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 4, marginTop: 4, fontSize: 10, color: isMe ? "rgba(255,255,255,0.7)" : "var(--text-secondary)" }}>
                             <span>{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                             {isMe && !isDeleted && (
-                              msg.read ? <CheckCheck size={12} color="#60a5fa" /> : <Check size={12} />
+                              msg.read ? <CheckCheck size={12} color="var(--info)" /> : <Check size={12} />
                             )}
                           </div>
                         </div>
@@ -936,7 +958,7 @@ const ChatInterface = ({ user, currentRole, token }) => {
 
               {/* Typing Indicator */}
               {partnerTyping && (
-                <div style={{ display: "flex", gap: 4, alignItems: "center", color: "#94a3b8", fontSize: 12, fontStyle: "italic" }}>
+                <div style={{ display: "flex", gap: 4, alignItems: "center", color: "var(--text-muted)", fontSize: 12, fontStyle: "italic" }}>
                   <span>{selectedContact.name} is typing...</span>
                 </div>
               )}
@@ -945,7 +967,7 @@ const ChatInterface = ({ user, currentRole, token }) => {
             </div>
 
             {/* Input Form */}
-            <form onSubmit={handleSend} style={{ padding: "16px 20px", borderTop: "1px solid rgba(255,255,255,0.06)", display: "flex", gap: 12, background: "rgba(15, 23, 42, 0.4)" }}>
+            <form onSubmit={handleSend} style={{ padding: "16px 20px", borderTop: "1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)", display: "flex", gap: 12, background: "var(--gray-100)" }}>
               <input
                 type="text"
                 value={inputValue}
@@ -956,9 +978,9 @@ const ChatInterface = ({ user, currentRole, token }) => {
                   flex: 1,
                   padding: "12px 16px",
                   borderRadius: 10,
-                  background: "rgba(255,255,255,0.05)",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  color: "#fff",
+                  background: "color-mix(in srgb, var(--text-primary) 4%, transparent)",
+                  border: "1px solid color-mix(in srgb, var(--text-primary) 8%, transparent)",
+                  color: "var(--text-primary)",
                   outline: "none",
                   fontSize: 13
                 }}
@@ -986,9 +1008,9 @@ const ChatInterface = ({ user, currentRole, token }) => {
             </form>
           </>
         ) : (
-          <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justify: "center", color: "#64748b", padding: 40, textAlign: "center" }}>
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justify: "center", color: "var(--text-secondary)", padding: 40, textAlign: "center" }}>
             <AlertCircle size={32} style={{ marginBottom: 12, opacity: 0.7 }} />
-            <h4 style={{ color: "#94a3b8", margin: "0 0 6px 0" }}>No Chat Selected</h4>
+            <h4 style={{ color: "var(--text-muted)", margin: "0 0 6px 0" }}>No Chat Selected</h4>
             <p style={{ fontSize: 13, maxWidth: 320 }}>Select a contact from the list or use the search bar above to start a conversation!</p>
           </div>
         )}

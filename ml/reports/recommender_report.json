@@ -1,0 +1,89 @@
+{
+  "dataset": "Goodbooks-10k (5,976,479 ratings, 53,424 users, 10,000 books)",
+  "protocol": "per-user random 80/20 split (not time-based, so absolute numbers are optimistic); rank unrated books; relevant = held-out rating >= 4",
+  "eval_users_sampled": 4000,
+  "results": {
+    "top_rated": {
+      "hit_rate@10": 0.0227,
+      "precision@10": 0.0026,
+      "recall@10": 0.0018,
+      "ndcg@10": 0.0026,
+      "users_evaluated": 4000
+    },
+    "most_liked": {
+      "hit_rate@10": 0.4218,
+      "precision@10": 0.0746,
+      "recall@10": 0.0483,
+      "ndcg@10": 0.0917,
+      "users_evaluated": 4000
+    },
+    "item_cf": {
+      "hit_rate@10": 0.82,
+      "precision@10": 0.2238,
+      "recall@10": 0.1488,
+      "ndcg@10": 0.2757,
+      "users_evaluated": 4000
+    },
+    "svd": {
+      "hit_rate@10": 0.5805,
+      "precision@10": 0.1031,
+      "recall@10": 0.0675,
+      "ndcg@10": 0.1327,
+      "users_evaluated": 4000
+    }
+  },
+  "best": "item_cf",
+  "examples": [
+    {
+      "book": "Harry Potter and the Sorcerer's Stone (Harry Potter, #1)",
+      "similar": [
+        "Harry Potter and the Prisoner of Azkaban (Harry Potter, #3)",
+        "Harry Potter and the Chamber of Secrets (Harry Potter, #2)",
+        "Harry Potter and the Goblet of Fire (Harry Potter, #4)",
+        "Harry Potter and the Half-Blood Prince (Harry Potter, #6)",
+        "Harry Potter and the Deathly Hallows (Harry Potter, #7)"
+      ]
+    },
+    {
+      "book": "The Hunger Games (The Hunger Games, #1)",
+      "similar": [
+        "Catching Fire (The Hunger Games, #2)",
+        "Harry Potter and the Sorcerer's Stone (Harry Potter, #1)",
+        "Mockingjay (The Hunger Games, #3)",
+        "Harry Potter and the Deathly Hallows (Harry Potter, #7)",
+        "The Help"
+      ]
+    },
+    {
+      "book": "Pride and Prejudice",
+      "similar": [
+        "Sense and Sensibility",
+        "Jane Eyre",
+        "Persuasion",
+        "Emma",
+        "To Kill a Mockingbird"
+      ]
+    },
+    {
+      "book": "The Da Vinci Code (Robert Langdon, #2)",
+      "similar": [
+        "Angels & Demons  (Robert Langdon, #1)",
+        "Twilight (Twilight, #1)",
+        "The Alchemist",
+        "The Devil Wears Prada (The Devil Wears Prada, #1)",
+        "Memoirs of a Geisha"
+      ]
+    },
+    {
+      "book": "The Fault in Our Stars",
+      "similar": [
+        "The Hunger Games (The Hunger Games, #1)",
+        "Divergent (Divergent, #1)",
+        "The Book Thief",
+        "Me Before You (Me Before You, #1)",
+        "Catching Fire (The Hunger Games, #2)"
+      ]
+    }
+  ],
+  "trained_seconds": 23.6
+}

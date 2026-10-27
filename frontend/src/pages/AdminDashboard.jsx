@@ -1,1451 +1,794 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import {
-  Shield, Users, BookOpen, BarChart2, DollarSign, Star, FileText,
-  Sparkles, Trash2, Edit3, CheckCircle, XCircle, Search, Filter,
-  ArrowUpRight, Lock, Unlock, RefreshCw, Eye, BookMarked, Upload,
-  Activity, Layers, Settings, LogOut, ChevronRight, Check, X,
-  AlertTriangle, Building, CreditCard, MessageSquare, ShieldCheck
+  BookOpen, Users, Shield, BarChart2, DollarSign, Activity, ScrollText, LogOut,
+  AlertCircle, CheckCircle, Search, FileWarning, UserPlus, Menu,
 } from "lucide-react";
-import "./AdminDashboard.css";
+import ThemeToggle from "../components/ThemeToggle";
+import HelpTip from "../components/HelpTip";
+import { ChartCard, Legend, TimeChart, TimeTable, HBars, SegmentBar, Sparkline, Delta } from "../components/admin/charts";
+import { compact, money } from "../components/admin/format";
+import "../styles/admin.css";
+import "../styles/adminViz.css";
 
-// Import role-specific components for the Role Studio
-import {
-  AuthorOverview,
-  AuthorMyBooks,
-  AuthorUploadBook,
-  AuthorAIAssistant
-} from "./AuthorDashboard";
-import PublisherDashboard from "./PublisherDashboard";
-import ReaderDashboard from "./ReaderDashboard";
+import { API_URL } from "../config";
+const BASE_URL = API_URL;
 
-const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const when = (d) => (d ? new Date(d).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : "—");
+const errorOf = (err, fallback) => err.response?.data?.message || fallback;
 
-const AdminDashboard = ({ user, token, onLogout }) => {
-  const [activeTab, setActiveTab] = useState("overview");
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
+// Verified evidence checklist + where to look each number up (official portals).
+const LOOKUPS = {
+  CIN: { label: "MCA company search", url: "https://www.mca.gov.in/" },
+  LLPIN: { label: "MCA LLP search", url: "https://www.mca.gov.in/" },
+  GSTIN: { label: "GST taxpayer search", url: "https://services.gst.gov.in/services/searchtp" },
+  UDYAM: { label: "Udyam verification", url: "https://udyamregistration.gov.in/Udyam_Verify.aspx" },
+  ISBN_PREFIX: { label: "ISBN agency (isbn.gov.in)", url: "https://isbn.gov.in/" },
+};
 
-  // Masquerade / Persona Mode: "admin" | "author" | "publisher" | "reader"
-  const [personaMode, setPersonaMode] = useState("admin");
+const Pill = ({ tone = "", children }) => <span className={`admin-pill ${tone}`}>{children}</span>;
 
-  // Stats State
-  const [stats, setStats] = useState(null);
-  const [statsLoading, setStatsLoading] = useState(false);
+const Pager = ({ page, pages, onPage }) =>
+  pages > 1 ? (
+    <div className="admin-pager">
+      <button className="admin-btn" disabled={page <= 1} onClick={() => onPage(page - 1)}>Previous</button>
+      <span>Page {page} of {pages}</span>
+      <button className="admin-btn" disabled={page >= pages} onClick={() => onPage(page + 1)}>Next</button>
+    </div>
+  ) : null;
 
-  // Users State
-  const [users, setUsers] = useState([]);
-  const [userSearch, setUserSearch] = useState("");
-  const [userRoleFilter, setUserRoleFilter] = useState("all");
-  const [userVerifyFilter, setUserVerifyFilter] = useState("all");
-  const [selectedUser, setSelectedUser] = useState(null);
-  const [editUserModalOpen, setEditUserModalOpen] = useState(false);
-  const [editUserData, setEditUserData] = useState({});
+const Heading = ({ title, text }) => (
+  <div className="dash-welcome">
+    <div>
+      <h1>{title}</h1>
+      <p>{text}</p>
+    </div>
+  </div>
+);
 
-  // Books State
-  const [books, setBooks] = useState([]);
-  const [bookSearch, setBookSearch] = useState("");
-  const [bookStatusFilter, setBookStatusFilter] = useState("all");
-  const [bookGenreFilter, setBookGenreFilter] = useState("all");
-  const [selectedBook, setSelectedBook] = useState(null);
-  const [editBookModalOpen, setEditBookModalOpen] = useState(false);
-  const [editBookData, setEditBookData] = useState({});
-  const [inspectBookModalOpen, setInspectBookModalOpen] = useState(false);
+// ───────────────────────── Overview ─────────────────────────
+const MONEY_SERIES = [
+  { key: "book_purchase", label: "Book purchases", color: "var(--viz-s1)" },
+  { key: "publishing_fee", label: "Publishing fees", color: "var(--viz-s2)" },
+  { key: "p2p_transfer", label: "Transfers", color: "var(--viz-s3)" },
+];
+const SIGNUP_SERIES = [{ key: "value", label: "New users", color: "var(--viz-s1)" }];
+const BOOK_SERIES = [{ key: "value", label: "New books", color: "var(--viz-s1)" }];
+const ROLE_COLORS = { reader: "var(--viz-s1)", author: "var(--viz-s2)", publisher: "var(--viz-s3)", admin: "var(--viz-s4)" };
+const FEED_ICON = { signup: UserPlus, payment: DollarSign, admin: ScrollText, verification: Shield };
 
-  // Submissions & Publishers State
-  const [submissions, setSubmissions] = useState([]);
-  const [publisherTab, setPublisherTab] = useState("submissions");
+const ago = (d) => {
+  const mins = Math.max(1, Math.round((Date.now() - new Date(d)) / 60000));
+  if (mins < 60) return `${mins} min ago`;
+  if (mins < 1440) return `${Math.round(mins / 60)} h ago`;
+  return `${Math.round(mins / 1440)} d ago`;
+};
 
-  // Transactions State
-  const [transactions, setTransactions] = useState([]);
-  const [txTypeFilter, setTxTypeFilter] = useState("all");
+const Overview = ({ go }) => {
+  const [days, setDays] = useState(30);
+  const [data, setData] = useState(null);
+  const [health, setHealth] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  // Reviews State
-  const [reviews, setReviews] = useState([]);
+  const changeRange = (d) => {
+    setLoading(true); // keep the old charts on screen, dimmed, while the new range loads
+    setDays(d);
+  };
 
-  // Fetch initial data
   useEffect(() => {
-    fetchStats();
-  }, []);
+    let cancelled = false;
+    Promise.all([
+      axios.get(`${BASE_URL}/api/admin/analytics`, { params: { days } }),
+      axios.get(`${BASE_URL}/api/admin/overview`),
+    ])
+      .then(([a, o]) => {
+        if (cancelled) return;
+        setData(a.data.data);
+        setHealth(o.data.data);
+        setError("");
+      })
+      .catch((e) => !cancelled && setError(errorOf(e, "Could not load the overview.")))
+      .finally(() => !cancelled && setLoading(false));
+    return () => { cancelled = true; };
+  }, [days]);
 
-  useEffect(() => {
-    if (activeTab === "overview") fetchStats();
-    if (activeTab === "users") fetchUsers();
-    if (activeTab === "books") fetchBooks();
-    if (activeTab === "publishers") fetchSubmissions();
-    if (activeTab === "transactions") fetchTransactions();
-    if (activeTab === "reviews") fetchReviews();
-  }, [activeTab]);
+  if (error && !data) return <p style={{ color: "var(--danger)" }}>{error}</p>;
+  if (!data || !health) return <p style={{ color: "var(--text-muted)" }}>Loading…</p>;
 
-  // ─── API Call Helpers ──────────────────────────────────────────────────────
-  const authHeaders = { headers: { Authorization: `Bearer ${token}` } };
+  const k = data.kpis;
+  const h = health.health;
+  const attention = [
+    { label: "Publishers waiting for verification", value: h.pendingVerifications, tab: "verification" },
+    { label: "Manuscripts flagged for similarity", value: h.flaggedManuscripts, tab: "content", hint: "flagged" },
+    { label: "Failed payments", value: h.failedPayments, tab: "health" },
+    { label: "Awaiting a publisher's review", value: h.awaitingReview, tab: "health" },
+    { label: "Offers waiting for the author", value: h.openOffers, tab: "health" },
+  ];
+  const typeTotals = MONEY_SERIES.map((s) => ({ ...s, total: data.money.reduce((n, d) => n + d[s.key], 0) }));
+  const onChainShare = k.payments.value ? Math.round((k.payments.onChain / k.payments.value) * 100) : 0;
+  const roleSegments = Object.entries(data.usersByRole).map(([role, value]) => ({ key: role, label: role.charAt(0).toUpperCase() + role.slice(1) + "s", value, color: ROLE_COLORS[role] || "var(--viz-muted)" }))
+    .sort((a, b) => b.value - a.value);
+  const statusRows = Object.entries(health.booksByStatus)
+    .map(([status, value]) => ({ key: status, label: status.replace("_", " "), value }))
+    .sort((a, b) => b.value - a.value);
 
-  const fetchStats = async () => {
-    setStatsLoading(true);
-    try {
-      const { data } = await axios.get(`${BASE_URL}/api/admin/stats`, authHeaders);
-      if (data.success) setStats(data.data);
-    } catch (err) {
-      console.error("fetchStats error:", err);
-    } finally {
-      setStatsLoading(false);
-    }
-  };
-
-  const fetchUsers = async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams();
-      if (userRoleFilter !== "all") params.append("role", userRoleFilter);
-      if (userVerifyFilter !== "all") params.append("isVerified", userVerifyFilter === "verified" ? "true" : "false");
-      if (userSearch) params.append("search", userSearch);
-
-      const { data } = await axios.get(`${BASE_URL}/api/admin/users?${params.toString()}`, authHeaders);
-      if (data.success) setUsers(data.data);
-    } catch (err) {
-      console.error("fetchUsers error:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchBooks = async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams();
-      if (bookStatusFilter !== "all") params.append("status", bookStatusFilter);
-      if (bookGenreFilter !== "all") params.append("genre", bookGenreFilter);
-      if (bookSearch) params.append("search", bookSearch);
-
-      const { data } = await axios.get(`${BASE_URL}/api/admin/books?${params.toString()}`, authHeaders);
-      if (data.success) setBooks(data.data);
-    } catch (err) {
-      console.error("fetchBooks error:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchSubmissions = async () => {
-    setLoading(true);
-    try {
-      const { data } = await axios.get(`${BASE_URL}/api/admin/submissions`, authHeaders);
-      if (data.success) setSubmissions(data.data);
-    } catch (err) {
-      console.error("fetchSubmissions error:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchTransactions = async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams();
-      if (txTypeFilter !== "all") params.append("type", txTypeFilter);
-
-      const { data } = await axios.get(`${BASE_URL}/api/admin/transactions?${params.toString()}`, authHeaders);
-      if (data.success) setTransactions(data.data);
-    } catch (err) {
-      console.error("fetchTransactions error:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchReviews = async () => {
-    setLoading(true);
-    try {
-      const { data } = await axios.get(`${BASE_URL}/api/admin/reviews`, authHeaders);
-      if (data.success) setReviews(data.data);
-    } catch (err) {
-      console.error("fetchReviews error:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // ─── User Actions ──────────────────────────────────────────────────────────
-  const handleToggleVerifyUser = async (u) => {
-    try {
-      const updatedVerify = !u.isVerified;
-      const { data } = await axios.put(
-        `${BASE_URL}/api/admin/users/${u._id}`,
-        { isVerified: updatedVerify },
-        authHeaders
-      );
-      if (data.success) {
-        setUsers(users.map(item => item._id === u._id ? { ...item, isVerified: updatedVerify } : item));
-      }
-    } catch (err) {
-      alert(err.response?.data?.message || "Failed to toggle verification");
-    }
-  };
-
-  const handleSaveUserEdit = async () => {
-    if (!selectedUser) return;
-    try {
-      const { data } = await axios.put(
-        `${BASE_URL}/api/admin/users/${selectedUser._id}`,
-        editUserData,
-        authHeaders
-      );
-      if (data.success) {
-        alert("User details updated successfully!");
-        setEditUserModalOpen(false);
-        fetchUsers();
-      }
-    } catch (err) {
-      alert(err.response?.data?.message || "Failed to update user");
-    }
-  };
-
-  const handleDeleteUser = async (userId, name) => {
-    if (!window.confirm(`Are you sure you want to permanently delete user "${name}"?`)) return;
-    try {
-      const { data } = await axios.delete(`${BASE_URL}/api/admin/users/${userId}`, authHeaders);
-      if (data.success) {
-        alert("User deleted successfully!");
-        setUsers(users.filter(u => u._id !== userId));
-      }
-    } catch (err) {
-      alert(err.response?.data?.message || "Failed to delete user");
-    }
-  };
-
-  // ─── Book Actions ──────────────────────────────────────────────────────────
-  const handleQuickStatusChange = async (bookId, newStatus) => {
-    try {
-      const { data } = await axios.put(
-        `${BASE_URL}/api/admin/books/${bookId}`,
-        { status: newStatus },
-        authHeaders
-      );
-      if (data.success) {
-        setBooks(books.map(b => b._id === bookId ? { ...b, status: newStatus } : b));
-      }
-    } catch (err) {
-      alert(err.response?.data?.message || "Failed to update book status");
-    }
-  };
-
-  const handleSaveBookEdit = async () => {
-    if (!selectedBook) return;
-    try {
-      const { data } = await axios.put(
-        `${BASE_URL}/api/admin/books/${selectedBook._id}`,
-        editBookData,
-        authHeaders
-      );
-      if (data.success) {
-        alert("Book updated successfully!");
-        setEditBookModalOpen(false);
-        fetchBooks();
-      }
-    } catch (err) {
-      alert(err.response?.data?.message || "Failed to update book");
-    }
-  };
-
-  const handleDeleteBook = async (bookId, title) => {
-    if (!window.confirm(`Are you sure you want to delete book "${title}"?`)) return;
-    try {
-      const { data } = await axios.delete(`${BASE_URL}/api/admin/books/${bookId}`, authHeaders);
-      if (data.success) {
-        alert("Book deleted successfully!");
-        setBooks(books.filter(b => b._id !== bookId));
-      }
-    } catch (err) {
-      alert(err.response?.data?.message || "Failed to delete book");
-    }
-  };
-
-  // ─── Publisher & Review Actions ────────────────────────────────────────────
-  const handleVerifyPublisher = async (publisherId, isVerified) => {
-    try {
-      const { data } = await axios.put(
-        `${BASE_URL}/api/admin/publishers/${publisherId}/verify`,
-        { isVerified },
-        authHeaders
-      );
-      if (data.success) {
-        alert(data.message);
-        fetchUsers();
-      }
-    } catch (err) {
-      alert(err.response?.data?.message || "Verification failed");
-    }
-  };
-
-  const handleDeleteReview = async (bookId, reviewId) => {
-    if (!window.confirm("Delete this review from platform?")) return;
-    try {
-      const { data } = await axios.delete(
-        `${BASE_URL}/api/admin/reviews/${bookId}/${reviewId}`,
-        authHeaders
-      );
-      if (data.success) {
-        alert("Review removed!");
-        setReviews(reviews.filter(r => r._id !== reviewId));
-      }
-    } catch (err) {
-      alert(err.response?.data?.message || "Failed to delete review");
-    }
-  };
-
-  // ─── Persona Switcher (All-Access Delegation) ──────────────────────────────
-  if (personaMode === "author") {
-    return (
-      <div style={{ minHeight: "100vh", background: "#f8fafc" }}>
-        <div className="admin-masquerade-banner" style={{ margin: 0, borderRadius: 0 }}>
-          <div className="masquerade-info">
-            <Sparkles size={20} color="#c084fc" />
-            <div>
-              <div className="masquerade-title">🎭 Admin Mode: Author Studio View Active</div>
-              <div className="masquerade-desc">You are interacting with the full author suite as Administrator.</div>
-            </div>
-          </div>
-          <button className="btn-admin-primary" onClick={() => setPersonaMode("admin")}>
-            ← Return to Admin Console
-          </button>
+  return (
+    <>
+      <div className="ov-head">
+        <div>
+          <h1>Overview</h1>
+          <p>How BookConnect is doing, and what needs you.</p>
         </div>
-        <div style={{ padding: 24 }}>
-          <AuthorMyBooks
-            books={books}
-            loading={loading}
-            setActive={() => {}}
-            setEditingBookId={() => {}}
-            onPayCost={() => {}}
-          />
+        <div className="seg" role="group" aria-label="Time range">
+          {[7, 30, 90].map((d) => (
+            <button key={d} aria-pressed={days === d} onClick={() => changeRange(d)}>Last {d} days</button>
+          ))}
         </div>
       </div>
-    );
-  }
 
-  if (personaMode === "publisher") {
-    return (
-      <div style={{ minHeight: "100vh" }}>
-        <div className="admin-masquerade-banner" style={{ margin: 0, borderRadius: 0 }}>
-          <div className="masquerade-info">
-            <Building size={20} color="#38bdf8" />
-            <div>
-              <div className="masquerade-title">🎭 Admin Mode: Publisher Dashboard Active</div>
-              <div className="masquerade-desc">You are viewing the publishing house operations with Master Access.</div>
+      <div className={loading ? "ov-loading" : ""}>
+        {/* Hero + KPI tiles */}
+        <div className="viz-hero">
+          <section className="viz viz-card viz-hero-main">
+            <span className="viz-eyebrow">Money moved · last {days} days</span>
+            <span className="viz-hero-figure">{money(k.moneyMoved.value)}</span>
+            <div className="viz-hero-foot">
+              <Delta change={k.moneyMoved.change} />
+              <Sparkline values={k.moneyMoved.series.slice(-Math.min(days, 30))} width={120} height={32} />
             </div>
+          </section>
+          <div className="viz-kpis">
+            <section className="viz viz-card viz-kpi">
+              <span className="viz-eyebrow">New users</span>
+              <span className="viz-kpi-value">{compact(k.newUsers.value)}</span>
+              <Delta change={k.newUsers.change} />
+              <Sparkline values={k.newUsers.series} />
+            </section>
+            <section className="viz viz-card viz-kpi">
+              <span className="viz-eyebrow">New books</span>
+              <span className="viz-kpi-value">{compact(k.newBooks.value)}</span>
+              <Delta change={k.newBooks.change} />
+              <Sparkline values={k.newBooks.series} />
+            </section>
+            <section className="viz viz-card viz-kpi">
+              <span className="viz-eyebrow">Payments</span>
+              <span className="viz-kpi-value">{compact(k.payments.value)}</span>
+              <Delta change={k.payments.change} />
+              <span className="viz-eyebrow">{onChainShare}% recorded on-chain</span>
+            </section>
           </div>
-          <button className="btn-admin-primary" onClick={() => setPersonaMode("admin")}>
-            ← Return to Admin Console
-          </button>
         </div>
-        <PublisherDashboard user={user} token={token} onLogout={onLogout} />
-      </div>
-    );
-  }
 
-  if (personaMode === "reader") {
-    return (
-      <div style={{ minHeight: "100vh" }}>
-        <div className="admin-masquerade-banner" style={{ margin: 0, borderRadius: 0 }}>
-          <div className="masquerade-info">
-            <BookMarked size={20} color="#34d399" />
-            <div>
-              <div className="masquerade-title">🎭 Admin Mode: Reader Experience Active</div>
-              <div className="masquerade-desc">All books in library unlocked with Super-Admin VIP privileges.</div>
-            </div>
-          </div>
-          <button className="btn-admin-primary" onClick={() => setPersonaMode("admin")}>
-            ← Return to Admin Console
-          </button>
+        <h2 className="ov-section-title">Needs attention</h2>
+        <div className="admin-grid">
+          {attention.map((a) => (
+            <button key={a.label} className={`admin-attention ${a.value > 0 ? "hot" : ""}`} onClick={() => go(a.tab, a.hint)}>
+              <strong>{a.value}</strong>
+              <span>{a.label}</span>
+            </button>
+          ))}
         </div>
-        <ReaderDashboard user={user} token={token} onLogout={onLogout} />
-      </div>
-    );
-  }
 
-  // ─── Render Admin Tabs ─────────────────────────────────────────────────────
-  const renderTabContent = () => {
-    switch (activeTab) {
-      case "overview":
-        return (
-          <div>
-            {/* Persona Switcher Banner */}
-            <div className="admin-masquerade-banner">
-              <div className="masquerade-info">
-                <ShieldCheck size={22} color="#a855f7" />
-                <div>
-                  <div className="masquerade-title">Role Masquerade & Multi-Access Switcher</div>
-                  <div className="masquerade-desc">
-                    Instantly simulate and control any user role on BookConnect with master privileges.
-                  </div>
-                </div>
-              </div>
-              <div className="masquerade-actions">
-                <button className="btn-role-tab active" onClick={() => setPersonaMode("admin")}>Admin Hub</button>
-                <button className="btn-role-tab" onClick={() => setPersonaMode("author")}>Author Studio</button>
-                <button className="btn-role-tab" onClick={() => setPersonaMode("publisher")}>Publisher Desk</button>
-                <button className="btn-role-tab" onClick={() => setPersonaMode("reader")}>Reader VIP</button>
-              </div>
-            </div>
-
-            {/* KPI Metrics */}
-            <div className="admin-kpi-grid">
-              <div className="admin-kpi-card">
-                <div className="admin-kpi-icon" style={{ background: "rgba(239, 68, 68, 0.15)", color: "#ef4444" }}>
-                  <Users size={24} />
-                </div>
-                <div className="admin-kpi-info">
-                  <div className="admin-kpi-label">Total Users</div>
-                  <div className="admin-kpi-value">{stats?.users?.total ?? "—"}</div>
-                  <div className="admin-kpi-sub">
-                    <span>{stats?.users?.readers ?? 0} Readers</span> · 
-                    <span>{stats?.users?.authors ?? 0} Authors</span> · 
-                    <span>{stats?.users?.publishers ?? 0} Pubs</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="admin-kpi-card">
-                <div className="admin-kpi-icon" style={{ background: "rgba(139, 92, 246, 0.15)", color: "#8b5cf6" }}>
-                  <BookOpen size={24} />
-                </div>
-                <div className="admin-kpi-info">
-                  <div className="admin-kpi-label">Books & Manuscripts</div>
-                  <div className="admin-kpi-value">{stats?.books?.total ?? "—"}</div>
-                  <div className="admin-kpi-sub">
-                    <span style={{ color: "#34d399" }}>{stats?.books?.published ?? 0} Published</span> · 
-                    <span style={{ color: "#fbbf24" }}>{stats?.books?.underReview ?? 0} In Review</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="admin-kpi-card">
-                <div className="admin-kpi-icon" style={{ background: "rgba(16, 185, 129, 0.15)", color: "#10b981" }}>
-                  <DollarSign size={24} />
-                </div>
-                <div className="admin-kpi-info">
-                  <div className="admin-kpi-label">Financial Volume</div>
-                  <div className="admin-kpi-value">${(stats?.financials?.totalVolume ?? 0).toLocaleString()}</div>
-                  <div className="admin-kpi-sub">
-                    <span>{stats?.financials?.totalTransactions ?? 0} Completed Ledger Txs</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="admin-kpi-card">
-                <div className="admin-kpi-icon" style={{ background: "rgba(245, 158, 11, 0.15)", color: "#f59e0b" }}>
-                  <Star size={24} />
-                </div>
-                <div className="admin-kpi-info">
-                  <div className="admin-kpi-label">Platform Rating</div>
-                  <div className="admin-kpi-value">⭐ {stats?.engagement?.avgPlatformRating ?? "5.0"}</div>
-                  <div className="admin-kpi-sub">
-                    <span>Across {stats?.engagement?.totalReviews ?? 0} Reader Reviews</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Quick Actions & Recent Tables */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(400px, 1fr))", gap: 24 }}>
-              {/* Recent Users */}
-              <div className="admin-card">
-                <div className="admin-card-header">
-                  <div className="admin-card-title"><Users size={18} color="#ef4444" /> Recent Registrations</div>
-                  <button className="btn-secondary" onClick={() => setActiveTab("users")}>View All</button>
-                </div>
-                <div className="admin-table-wrap">
-                  <table className="admin-table">
-                    <thead>
-                      <tr>
-                        <th>User</th>
-                        <th>Role</th>
-                        <th>Wallet</th>
-                        <th>Verified</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {stats?.recent?.users?.map((u) => (
-                        <tr key={u._id}>
-                          <td>
-                            <div className="table-user-cell">
-                              <div className="table-user-avatar">
-                                {u.name?.[0]?.toUpperCase()}
-                              </div>
-                              <div className="table-user-info">
-                                <span className="table-user-name">{u.name}</span>
-                                <span className="table-user-email">{u.email}</span>
-                              </div>
-                            </div>
-                          </td>
-                          <td><span className={`badge-role ${u.role}`}>{u.role}</span></td>
-                          <td>${(u.walletBalance || 0).toFixed(2)}</td>
-                          <td>{u.isVerified ? <CheckCircle size={15} color="#34d399" /> : <XCircle size={15} color="#64748b" />}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Recent Books */}
-              <div className="admin-card">
-                <div className="admin-card-header">
-                  <div className="admin-card-title"><BookOpen size={18} color="#8b5cf6" /> Recent Books & Manuscripts</div>
-                  <button className="btn-secondary" onClick={() => setActiveTab("books")}>View All</button>
-                </div>
-                <div className="admin-table-wrap">
-                  <table className="admin-table">
-                    <thead>
-                      <tr>
-                        <th>Title</th>
-                        <th>Author</th>
-                        <th>Status</th>
-                        <th>Price</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {stats?.recent?.books?.map((b) => (
-                        <tr key={b._id}>
-                          <td>
-                            <div style={{ fontWeight: 600, color: "#fff" }}>{b.title}</div>
-                            <div style={{ fontSize: 11, color: "#64748b", textTransform: "capitalize" }}>{b.genre}</div>
-                          </td>
-                          <td>{b.author?.name || "Unknown"}</td>
-                          <td><span className={`badge-status ${b.status}`}>{b.status}</span></td>
-                          <td>{b.isPaid ? `$${b.price}` : "Free"}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
+        <h2 className="ov-section-title">Trends</h2>
+        <div className="ov-grid two">
+          <div className="ov-wide">
+            <ChartCard
+              title="Money moved per day"
+              subtitle={`Completed payments, by type · ${money(typeTotals.reduce((n, t) => n + t.total, 0))} total`}
+              legend={<Legend items={typeTotals.map((t) => ({ key: t.key, label: `${t.label} · ${money(t.total)}`, color: t.color }))} />}
+              table={<TimeTable data={data.money} series={MONEY_SERIES} format={money} />}
+            >
+              <TimeChart data={data.money} series={MONEY_SERIES} format={money} height={240} />
+            </ChartCard>
           </div>
-        );
+          <ChartCard title="New users per day" subtitle={`${k.newUsers.value} joined in the last ${days} days`} table={<TimeTable data={data.signups} series={SIGNUP_SERIES} />}>
+            <TimeChart data={data.signups} series={SIGNUP_SERIES} height={190} />
+          </ChartCard>
+          <ChartCard title="New books per day" subtitle={`${k.newBooks.value} created in the last ${days} days`} table={<TimeTable data={data.newBooks} series={BOOK_SERIES} />}>
+            <TimeChart data={data.newBooks} series={BOOK_SERIES} height={190} kind="line" />
+          </ChartCard>
+        </div>
 
-      case "users":
-        return (
-          <div className="admin-card">
-            <div className="admin-card-header">
-              <div className="admin-card-title"><Users size={20} color="#ef4444" /> Users Management ({users.length})</div>
-              <div className="admin-card-actions">
-                <div className="admin-search-wrap">
-                  <Search size={14} className="admin-search-icon" />
-                  <input
-                    type="text"
-                    placeholder="Search name or email..."
-                    value={userSearch}
-                    onChange={(e) => setUserSearch(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && fetchUsers()}
-                    className="admin-search-input"
-                  />
-                </div>
-                <select
-                  className="admin-select"
-                  value={userRoleFilter}
-                  onChange={(e) => { setUserRoleFilter(e.target.value); }}
-                >
-                  <option value="all">All Roles</option>
-                  <option value="reader">Readers</option>
-                  <option value="author">Authors</option>
-                  <option value="publisher">Publishers</option>
-                  <option value="admin">Admins</option>
-                </select>
-                <select
-                  className="admin-select"
-                  value={userVerifyFilter}
-                  onChange={(e) => { setUserVerifyFilter(e.target.value); }}
-                >
-                  <option value="all">All Verification</option>
-                  <option value="verified">Verified Only</option>
-                  <option value="unverified">Unverified</option>
-                </select>
-                <button className="btn-admin-primary" onClick={fetchUsers}>
-                  <RefreshCw size={14} /> Refresh
-                </button>
-              </div>
-            </div>
-
-            <div className="admin-table-wrap">
-              <table className="admin-table">
-                <thead>
-                  <tr>
-                    <th>User</th>
-                    <th>Role</th>
-                    <th>Status</th>
-                    <th>Wallet Balance</th>
-                    <th>Activity / Items</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.map((u) => (
-                    <tr key={u._id}>
-                      <td>
-                        <div className="table-user-cell">
-                          <div className="table-user-avatar">
-                            {u.profilePicture && u.profilePicture !== "default-avatar.png"
-                              ? <img src={u.profilePicture} alt={u.name} />
-                              : u.name?.[0]?.toUpperCase()}
-                          </div>
-                          <div className="table-user-info">
-                            <span className="table-user-name">{u.name}</span>
-                            <span className="table-user-email">{u.email}</span>
-                          </div>
-                        </div>
-                      </td>
-                      <td>
-                        <span className={`badge-role ${u.role}`}>{u.role}</span>
-                      </td>
-                      <td>
-                        <button
-                          onClick={() => handleToggleVerifyUser(u)}
-                          style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}
-                          title="Click to toggle verification status"
-                        >
-                          {u.isVerified ? (
-                            <span style={{ color: "#34d399", fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}>
-                              <ShieldCheck size={16} /> Verified
-                            </span>
-                          ) : (
-                            <span style={{ color: "#64748b", fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}>
-                              <Shield size={16} /> Unverified
-                            </span>
-                          )}
-                        </button>
-                      </td>
-                      <td>
-                        <strong>${(u.walletBalance || 0).toFixed(2)}</strong>
-                      </td>
-                      <td>
-                        <span style={{ fontSize: 12, color: "#94a3b8" }}>
-                          {u.role === "author" && `${u.authoredBooksCount || 0} books`}
-                          {u.role === "publisher" && `${u.publishedBooksCount || 0} published`}
-                          {u.role === "reader" && `${u.libraryCount || 0} in library`}
-                          {u.role === "admin" && "Super Master"}
-                        </span>
-                      </td>
-                      <td>
-                        <div className="action-btn-group">
-                          <button
-                            className="btn-icon-action"
-                            title="Edit User Details / Role"
-                            onClick={() => {
-                              setSelectedUser(u);
-                              setEditUserData({
-                                name: u.name,
-                                email: u.email,
-                                role: u.role,
-                                walletBalance: u.walletBalance || 0,
-                                isVerified: u.isVerified || false,
-                                bio: u.bio || ""
-                              });
-                              setEditUserModalOpen(true);
-                            }}
-                          >
-                            <Edit3 size={15} />
-                          </button>
-                          {u._id !== user?._id && (
-                            <button
-                              className="btn-icon-action danger"
-                              title="Delete User"
-                              onClick={() => handleDeleteUser(u._id, u.name)}
-                            >
-                              <Trash2 size={15} />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                  {users.length === 0 && !loading && (
-                    <tr>
-                      <td colSpan="6" style={{ textAlign: "center", padding: "32px", color: "#64748b" }}>
-                        No users found matching current filters.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        );
-
-      case "books":
-        return (
-          <div className="admin-card">
-            <div className="admin-card-header">
-              <div className="admin-card-title"><BookOpen size={20} color="#8b5cf6" /> Books & Manuscripts Direct Control ({books.length})</div>
-              <div className="admin-card-actions">
-                <div className="admin-search-wrap">
-                  <Search size={14} className="admin-search-icon" />
-                  <input
-                    type="text"
-                    placeholder="Search title, genre..."
-                    value={bookSearch}
-                    onChange={(e) => setBookSearch(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && fetchBooks()}
-                    className="admin-search-input"
-                  />
-                </div>
-                <select
-                  className="admin-select"
-                  value={bookStatusFilter}
-                  onChange={(e) => { setBookStatusFilter(e.target.value); }}
-                >
-                  <option value="all">All Statuses</option>
-                  <option value="published">Published</option>
-                  <option value="under_review">Under Review</option>
-                  <option value="cost_proposed">Cost Proposed</option>
-                  <option value="draft">Draft</option>
-                  <option value="archived">Archived</option>
-                </select>
-                <button className="btn-admin-primary" onClick={fetchBooks}>
-                  <RefreshCw size={14} /> Refresh
-                </button>
-              </div>
-            </div>
-
-            <div className="admin-table-wrap">
-              <table className="admin-table">
-                <thead>
-                  <tr>
-                    <th>Book Details</th>
-                    <th>Author</th>
-                    <th>Publisher</th>
-                    <th>Status</th>
-                    <th>Pricing</th>
-                    <th>Ratings / Reads</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {books.map((b) => (
-                    <tr key={b._id}>
-                      <td>
-                        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                          <img
-                            src={b.coverImage || "https://picsum.photos/seed/book/80/120"}
-                            alt={b.title}
-                            style={{ width: 34, height: 48, objectFit: "cover", borderRadius: 4 }}
-                          />
-                          <div>
-                            <div style={{ fontWeight: 600, color: "#fff" }}>{b.title}</div>
-                            <div style={{ fontSize: 11, color: "#94a3b8", textTransform: "capitalize" }}>{b.genre}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td>{b.author?.name || "Unknown"}</td>
-                      <td>{b.publisher?.name || <span style={{ color: "#64748b" }}>Self-Published</span>}</td>
-                      <td>
-                        <span className={`badge-status ${b.status}`}>{b.status}</span>
-                      </td>
-                      <td>
-                        {b.isPaid ? <strong>${b.price}</strong> : <span style={{ color: "#34d399" }}>Free</span>}
-                      </td>
-                      <td>
-                        <span style={{ fontSize: 12, color: "#cbd5e1" }}>
-                          ⭐ {b.averageRating || 0} ({b.totalRatings || 0}) · 👁️ {b.totalReads || 0}
-                        </span>
-                      </td>
-                      <td>
-                        <div className="action-btn-group">
-                          <button
-                            className="btn-icon-action"
-                            title="Inspect Full Content (Free VIP Access)"
-                            onClick={() => {
-                              setSelectedBook(b);
-                              setInspectBookModalOpen(true);
-                            }}
-                          >
-                            <Eye size={15} />
-                          </button>
-                          {b.status !== "published" ? (
-                            <button
-                              className="btn-icon-action success"
-                              title="Instant Publish"
-                              onClick={() => handleQuickStatusChange(b._id, "published")}
-                            >
-                              <CheckCircle size={15} />
-                            </button>
-                          ) : (
-                            <button
-                              className="btn-icon-action"
-                              title="Revert to Draft"
-                              onClick={() => handleQuickStatusChange(b._id, "draft")}
-                            >
-                              <XCircle size={15} />
-                            </button>
-                          )}
-                          <button
-                            className="btn-icon-action"
-                            title="Edit Book Details"
-                            onClick={() => {
-                              setSelectedBook(b);
-                              setEditBookData({
-                                title: b.title,
-                                genre: b.genre,
-                                price: b.price || 0,
-                                isPaid: b.isPaid || false,
-                                status: b.status,
-                                description: b.description || "",
-                                publishingCost: b.publishingCost || 0
-                              });
-                              setEditBookModalOpen(true);
-                            }}
-                          >
-                            <Edit3 size={15} />
-                          </button>
-                          <button
-                            className="btn-icon-action danger"
-                            title="Delete Book"
-                            onClick={() => handleDeleteBook(b._id, b.title)}
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        );
-
-      case "publishers":
-        return (
-          <div className="admin-card">
-            <div className="admin-card-header">
-              <div className="admin-card-title"><Building size={20} color="#0ea5e9" /> Publisher Center & Submissions</div>
-              <div className="admin-card-actions">
-                <button
-                  className={`btn-secondary ${publisherTab === "submissions" ? "btn-admin-primary" : ""}`}
-                  onClick={() => setPublisherTab("submissions")}
-                >
-                  Manuscript Submissions ({submissions.length})
-                </button>
-                <button
-                  className={`btn-secondary ${publisherTab === "verifications" ? "btn-admin-primary" : ""}`}
-                  onClick={() => setPublisherTab("verifications")}
-                >
-                  Publisher Verifications
-                </button>
-              </div>
-            </div>
-
-            {publisherTab === "submissions" ? (
-              <div className="admin-table-wrap">
-                <table className="admin-table">
-                  <thead>
-                    <tr>
-                      <th>Manuscript</th>
-                      <th>Author</th>
-                      <th>Target Publisher</th>
-                      <th>Status</th>
-                      <th>Proposed Cost</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {submissions.map((s) => (
-                      <tr key={s._id}>
-                        <td>
-                          <strong>{s.title}</strong>
-                          <div style={{ fontSize: 11, color: "#64748b" }}>{s.genre}</div>
-                        </td>
-                        <td>{s.author?.name}</td>
-                        <td>{s.publisher?.name || "Pending Selection"}</td>
-                        <td><span className={`badge-status ${s.status}`}>{s.status}</span></td>
-                        <td>${s.publishingCost || 0}</td>
-                        <td>
-                          <div className="action-btn-group">
-                            <button
-                              className="btn-icon-action"
-                              title="Inspect Manuscript"
-                              onClick={() => { setSelectedBook(s); setInspectBookModalOpen(true); }}
-                            >
-                              <Eye size={15} />
-                            </button>
-                            <button
-                              className="btn-icon-action success"
-                              title="Force Approve & Publish"
-                              onClick={() => handleQuickStatusChange(s._id, "published")}
-                            >
-                              <CheckCircle size={15} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                    {submissions.length === 0 && (
-                      <tr>
-                        <td colSpan="6" style={{ textAlign: "center", padding: "28px", color: "#64748b" }}>
-                          No manuscripts currently pending publisher review.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="admin-table-wrap">
-                <table className="admin-table">
-                  <thead>
-                    <tr>
-                      <th>Publisher</th>
-                      <th>Doc Proof</th>
-                      <th>Blockchain Hash</th>
-                      <th>Verification Status</th>
-                      <th>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {users.filter(u => u.role === "publisher").map((p) => (
-                      <tr key={p._id}>
-                        <td>
-                          <strong>{p.name}</strong>
-                          <div style={{ fontSize: 11, color: "#64748b" }}>{p.email}</div>
-                        </td>
-                        <td>
-                          {p.publisherVerification?.documentLink ? (
-                            <a
-                              href={p.publisherVerification.documentLink}
-                              target="_blank"
-                              rel="noreferrer"
-                              style={{ color: "#38bdf8", textDecoration: "underline", fontSize: 12 }}
-                            >
-                              View Legal Proof
-                            </a>
-                          ) : (
-                            <span style={{ color: "#64748b", fontSize: 12 }}>No document uploaded</span>
-                          )}
-                        </td>
-                        <td>
-                          <code style={{ fontSize: 11, color: "#a78bfa" }}>
-                            {p.publisherVerification?.blockchainHash || p.blockchainWallet?.address || "Unregistered"}
-                          </code>
-                        </td>
-                        <td>
-                          {p.isVerified ? (
-                            <span style={{ color: "#34d399", fontSize: 12, fontWeight: 700 }}>VERIFIED</span>
-                          ) : (
-                            <span style={{ color: "#f59e0b", fontSize: 12, fontWeight: 700 }}>PENDING</span>
-                          )}
-                        </td>
-                        <td>
-                          <button
-                            className="btn-admin-primary"
-                            onClick={() => handleVerifyPublisher(p._id, !p.isVerified)}
-                          >
-                            {p.isVerified ? "Revoke Verification" : "Approve & Verify"}
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+        <h2 className="ov-section-title">The platform right now</h2>
+        <div className="ov-grid">
+          <ChartCard title="Who is on BookConnect" subtitle={`${health.totalUsers} accounts${health.suspendedUsers ? ` · ${health.suspendedUsers} suspended` : ""}`}>
+            <SegmentBar segments={roleSegments} />
+          </ChartCard>
+          <ChartCard title="Books by status" subtitle={`${health.totalBooks} books in total`}>
+            <HBars rows={statusRows} />
+          </ChartCard>
+          <ChartCard title="Most-read books" subtitle="Published books, by reads">
+            <HBars rows={data.topBooks.map((b) => ({ key: b._id, label: b.title, value: b.totalReads, hint: `${b.author?.name || ""} · ${b.averageRating || 0}★ from ${b.totalRatings} ratings` }))} empty="No published books yet." />
+          </ChartCard>
+          <ChartCard title="Top earners" subtitle="Authors, by earnings">
+            <HBars
+              rows={data.topAuthors.map((u) => ({ key: u._id, label: u.name, value: u.earnings }))}
+              format={money}
+              empty="No earnings yet."
+            />
+          </ChartCard>
+          <ChartCard title="Top publishers" subtitle="By fees earned">
+            <HBars
+              rows={data.topPublishers.map((u) => ({
+                key: u._id,
+                label: u.name,
+                value: u.earnings,
+                badge: u.publisherVerification?.isVerified ? <Pill tone="good">verified</Pill> : null,
+              }))}
+              format={money}
+              empty="No fees earned yet."
+            />
+          </ChartCard>
+          <section className="viz viz-card">
+            <header className="viz-card-head"><div><h3>Latest activity</h3><p>Sign-ups, payments and admin actions</p></div></header>
+            {data.activity.length === 0 ? <p className="viz-empty">Nothing yet.</p> : (
+              <ul className="feed">
+                {data.activity.map((e, i) => {
+                  const Icon = FEED_ICON[e.kind] || Activity;
+                  return (
+                    <li key={i}>
+                      <span className="feed-icon">{React.createElement(Icon, { size: 14 })}</span>
+                      <span>{e.text}</span>
+                      <time>{ago(e.at)}</time>
+                    </li>
+                  );
+                })}
+              </ul>
             )}
-          </div>
-        );
+          </section>
+        </div>
+      </div>
+    </>
+  );
+};
 
-      case "transactions":
-        return (
-          <div className="admin-card">
-            <div className="admin-card-header">
-              <div className="admin-card-title"><CreditCard size={20} color="#10b981" /> Financial & Blockchain Ledger ({transactions.length})</div>
-              <div className="admin-card-actions">
-                <select
-                  className="admin-select"
-                  value={txTypeFilter}
-                  onChange={(e) => setTxTypeFilter(e.target.value)}
-                >
-                  <option value="all">All Types</option>
-                  <option value="book_purchase">Book Purchases</option>
-                  <option value="publishing_fee">Publishing Fees</option>
-                  <option value="p2p_transfer">P2P Transfers</option>
-                </select>
-                <button className="btn-admin-primary" onClick={fetchTransactions}>
-                  <RefreshCw size={14} /> Refresh
-                </button>
-              </div>
-            </div>
+// ───────────────────────── Users ─────────────────────────
+const UsersTab = () => {
+  const [filters, setFilters] = useState({ search: "", role: "", status: "" });
+  const [page, setPage] = useState(1);
+  const [rows, setRows] = useState([]);
+  const [pages, setPages] = useState(1);
+  const [detail, setDetail] = useState(null);
+  const [error, setError] = useState("");
 
-            <div className="admin-table-wrap">
-              <table className="admin-table">
-                <thead>
-                  <tr>
-                    <th>Tx Hash</th>
-                    <th>Type</th>
-                    <th>Sender</th>
-                    <th>Receiver</th>
-                    <th>Amount</th>
-                    <th>Status</th>
-                    <th>Date</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {transactions.map((tx) => (
-                    <tr key={tx._id}>
-                      <td>
-                        <code style={{ fontSize: 11, color: "#38bdf8" }}>
-                          {tx.txHash ? `${tx.txHash.slice(0, 10)}...${tx.txHash.slice(-8)}` : "Internal Ledger"}
-                        </code>
-                      </td>
-                      <td>
-                        <span style={{ textTransform: "capitalize", fontWeight: 600 }}>
-                          {tx.type.replace("_", " ")}
-                        </span>
-                      </td>
-                      <td>{tx.sender?.name || "System"}</td>
-                      <td>{tx.receiver?.name || "System"}</td>
-                      <td><strong style={{ color: "#10b981" }}>${(tx.amount || 0).toFixed(2)}</strong></td>
-                      <td>
-                        <span className="badge-status published">{tx.status}</span>
-                      </td>
-                      <td style={{ fontSize: 12, color: "#94a3b8" }}>
-                        {new Date(tx.createdAt).toLocaleDateString()}
-                      </td>
-                    </tr>
-                  ))}
-                  {transactions.length === 0 && (
-                    <tr>
-                      <td colSpan="7" style={{ textAlign: "center", padding: "28px", color: "#64748b" }}>
-                        No transactions found in platform ledger.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        );
+  const load = useCallback(() => {
+    const params = { page, ...Object.fromEntries(Object.entries(filters).filter(([, v]) => v)) };
+    axios.get(`${BASE_URL}/api/admin/users`, { params })
+      .then((r) => { setRows(r.data.data); setPages(r.data.pages); setError(""); })
+      .catch((e) => setError(errorOf(e, "Could not load users.")));
+  }, [filters, page]);
 
-      case "reviews":
-        return (
-          <div className="admin-card">
-            <div className="admin-card-header">
-              <div className="admin-card-title"><MessageSquare size={20} color="#f59e0b" /> Reviews & Content Moderation ({reviews.length})</div>
-              <button className="btn-admin-primary" onClick={fetchReviews}><RefreshCw size={14} /> Refresh</button>
-            </div>
+  useEffect(() => {
+    const t = setTimeout(load, 250); // small delay while typing in the search box
+    return () => clearTimeout(t);
+  }, [load]);
 
-            <div className="admin-table-wrap">
-              <table className="admin-table">
-                <thead>
-                  <tr>
-                    <th>Book</th>
-                    <th>Reviewer</th>
-                    <th>Rating</th>
-                    <th>Review Comment</th>
-                    <th>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {reviews.map((r) => (
-                    <tr key={r._id}>
-                      <td>
-                        <strong>{r.bookTitle}</strong>
-                        <div style={{ fontSize: 11, color: "#64748b" }}>by {r.authorName}</div>
-                      </td>
-                      <td>{r.user?.name || "Anonymous"}</td>
-                      <td>
-                        <span style={{ color: "#fbbf24", fontWeight: 700 }}>
-                          {"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}
-                        </span>
-                      </td>
-                      <td style={{ maxWidth: 360, color: "#e2e8f0", fontSize: 13 }}>
-                        "{r.review || "No written review text provided."}"
-                      </td>
-                      <td>
-                        <button
-                          className="btn-icon-action danger"
-                          title="Remove Review"
-                          onClick={() => handleDeleteReview(r.bookId, r._id)}
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                  {reviews.length === 0 && (
-                    <tr>
-                      <td colSpan="5" style={{ textAlign: "center", padding: "28px", color: "#64748b" }}>
-                        No reader reviews on the platform yet.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        );
-
-      default:
-        return null;
+  const act = async (fn) => {
+    try {
+      await fn();
+      load();
+      setDetail(null);
+    } catch (e) {
+      alert(errorOf(e, "That didn't work."));
     }
+  };
+
+  const suspend = (u) => {
+    const reason = window.prompt(`Suspend ${u.name}? They'll be signed out and unable to log in.\n\nReason (required):`);
+    if (reason && reason.trim()) act(() => axios.put(`${BASE_URL}/api/admin/users/${u._id}/suspend`, { reason }));
+  };
+  const reinstate = (u) => act(() => axios.put(`${BASE_URL}/api/admin/users/${u._id}/unsuspend`, {}));
+  const changeRole = (u) => {
+    const role = window.prompt(`New role for ${u.name} (reader, author or publisher):`, u.role);
+    if (role && role !== u.role) act(() => axios.put(`${BASE_URL}/api/admin/users/${u._id}/role`, { role: role.trim().toLowerCase() }));
+  };
+  const open = (u) =>
+    axios.get(`${BASE_URL}/api/admin/users/${u._id}`).then((r) => setDetail(r.data.data)).catch((e) => alert(errorOf(e, "Could not open the user.")));
+
+  const set = (key) => (e) => { setPage(1); setFilters((f) => ({ ...f, [key]: e.target.value })); };
+
+  return (
+    <>
+      <Heading title="Users" text="Search people, suspend accounts that break the rules, and fix roles." />
+      <div className="admin-toolbar">
+        <div style={{ position: "relative" }}>
+          <Search size={14} style={{ position: "absolute", left: 10, top: 11, color: "var(--text-muted)" }} />
+          <input className="input-field" style={{ paddingLeft: 30 }} placeholder="Search name or email" value={filters.search} onChange={set("search")} />
+        </div>
+        <select className="input-field" value={filters.role} onChange={set("role")}>
+          <option value="">All roles</option>
+          <option value="reader">Readers</option>
+          <option value="author">Authors</option>
+          <option value="publisher">Publishers</option>
+          <option value="admin">Admins</option>
+        </select>
+        <select className="input-field" value={filters.status} onChange={set("status")}>
+          <option value="">Any status</option>
+          <option value="active">Active</option>
+          <option value="suspended">Suspended</option>
+        </select>
+      </div>
+      {error && <p style={{ color: "var(--danger)" }}>{error}</p>}
+
+      <div className="glass-panel admin-table-wrap" style={{ padding: 0 }}>
+        <table className="admin-table">
+          <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Joined</th><th /></tr></thead>
+          <tbody>
+            {rows.length === 0 && <tr><td colSpan={6} style={{ color: "var(--text-muted)" }}>No users match.</td></tr>}
+            {rows.map((u) => (
+              <tr key={u._id}>
+                <td>{u.name}</td>
+                <td>{u.email}</td>
+                <td>
+                  <Pill tone={u.role === "admin" ? "info" : ""}>{u.role}</Pill>{" "}
+                  {u.role === "publisher" && u.publisherVerification?.isVerified && <Pill tone="good">verified</Pill>}
+                </td>
+                <td>{u.isSuspended ? <Pill tone="bad">suspended</Pill> : <Pill tone="good">active</Pill>}</td>
+                <td>{when(u.createdAt)}</td>
+                <td>
+                  <div className="admin-actions">
+                    <button className="admin-btn" onClick={() => open(u)}>View</button>
+                    {u.role !== "admin" && (u.isSuspended
+                      ? <button className="admin-btn ok" onClick={() => reinstate(u)}>Reinstate</button>
+                      : <button className="admin-btn danger" onClick={() => suspend(u)}>Suspend</button>)}
+                    {u.role !== "admin" && <button className="admin-btn" onClick={() => changeRole(u)}>Change role</button>}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <Pager page={page} pages={pages} onPage={setPage} />
+
+      {detail && (
+        <div className="glass-panel admin-card" style={{ marginTop: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between" }}>
+            <h3 style={{ margin: 0 }}>{detail.name}</h3>
+            <button className="admin-btn" onClick={() => setDetail(null)}>Close</button>
+          </div>
+          <dl className="admin-kv">
+            <dt>Email</dt><dd>{detail.email} {detail.isEmailVerified ? <Pill tone="good">verified</Pill> : <Pill tone="warn">not verified</Pill>}</dd>
+            <dt>Role</dt><dd>{detail.role}</dd>
+            <dt>Joined</dt><dd>{when(detail.createdAt)}</dd>
+            <dt>Books written</dt><dd>{detail.booksAuthored} ({detail.publishedBooks} published)</dd>
+            <dt>Books bought</dt><dd>{detail.purchasedCount}</dd>
+            <dt>Payments</dt><dd>{detail.transactions}</dd>
+            <dt>Wallet balance</dt><dd>{money(detail.walletBalance)} (earned {money(detail.earnings)})</dd>
+            <dt>Linked wallet</dt><dd style={{ fontFamily: "monospace" }}>{detail.walletAddress || "none"}</dd>
+            {detail.isSuspended && <><dt>Suspended</dt><dd>{detail.suspendedReason} · {when(detail.suspendedAt)}</dd></>}
+          </dl>
+        </div>
+      )}
+    </>
+  );
+};
+
+// ───────────────────────── Publisher verification ─────────────────────────
+const VerificationTab = () => {
+  const [status, setStatus] = useState("pending");
+  const [rows, setRows] = useState([]);
+  const [error, setError] = useState("");
+
+  const load = useCallback(() => {
+    axios.get(`${BASE_URL}/api/admin/publisher-verifications`, { params: { status } })
+      .then((r) => { setRows(r.data.data); setError(""); })
+      .catch((e) => setError(errorOf(e, "Could not load requests.")));
+  }, [status]);
+  useEffect(load, [load]);
+
+  const approve = async (u) => {
+    if (!window.confirm(`Approve ${u.publisherVerification.companyName}? Only do this after you've checked the number on the official register and the document.`)) return;
+    try { await axios.post(`${BASE_URL}/api/admin/publisher-verifications/${u._id}/approve`, {}); load(); }
+    catch (e) { alert(errorOf(e, "Could not approve.")); }
+  };
+  const reject = async (u) => {
+    const reason = window.prompt("Why is this being rejected? (the publisher will see this)");
+    if (!reason || !reason.trim()) return;
+    try { await axios.post(`${BASE_URL}/api/admin/publisher-verifications/${u._id}/reject`, { reason }); load(); }
+    catch (e) { alert(errorOf(e, "Could not reject.")); }
   };
 
   return (
-    <div className="admin-wrapper">
-      {/* ─── Sidebar ────────────────────────────────────────────────────────── */}
-      <aside className={`admin-sidebar ${sidebarOpen ? "open" : ""}`}>
-        <div className="admin-sidebar-header">
-          <div className="admin-logo-box">
-            <div className="admin-logo-icon"><Shield size={22} /></div>
-            <div className="admin-logo-text">
-              <span>BookConnect</span>
-              <span className="admin-badge-super">ADMIN CONSOLE</span>
+    <>
+      <Heading title="Publisher verification" text="Check that a publisher is a real, registered business before they get the Verified badge." />
+      <div className="admin-toolbar">
+        {["pending", "approved", "rejected"].map((s) => (
+          <button key={s} className={`admin-btn ${status === s ? "ok" : ""}`} onClick={() => setStatus(s)} style={{ textTransform: "capitalize" }}>{s}</button>
+        ))}
+        <HelpTip
+          title="How verification works"
+          text="The publisher sends a company name, a registration number and a link to a document. The app only checks the number's format. You confirm it is real by looking it up on the official register and checking that the name matches the document."
+        />
+      </div>
+      {error && <p style={{ color: "var(--danger)" }}>{error}</p>}
+      {rows.length === 0 && <p style={{ color: "var(--text-muted)", fontSize: 13 }}>Nothing {status}.</p>}
+
+      {rows.map((u) => {
+        const v = u.publisherVerification;
+        const lookup = LOOKUPS[v.registrationType];
+        return (
+          <div key={u._id} className="glass-panel admin-card">
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+              <h3 style={{ margin: 0 }}>{v.companyName} <span style={{ fontSize: 12, fontWeight: 400, color: "var(--text-muted)" }}>· {u.name} ({u.email})</span></h3>
+              <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Sent {when(v.submittedAt)}</span>
             </div>
+            <dl className="admin-kv">
+              <dt>Registration</dt><dd>{v.registrationType.replace("_", " ")}: <strong style={{ fontFamily: "monospace" }}>{v.registrationNumber}</strong></dd>
+              <dt>Document</dt><dd><a href={v.documentLink} target="_blank" rel="noopener noreferrer">{v.documentLink}</a></dd>
+              {v.websiteUrl && <><dt>Website</dt><dd><a href={v.websiteUrl} target="_blank" rel="noopener noreferrer">{v.websiteUrl}</a></dd></>}
+              {v.notes && <><dt>Notes</dt><dd>{v.notes}</dd></>}
+              {v.rejectionReason && <><dt>Rejected because</dt><dd>{v.rejectionReason}</dd></>}
+              {v.reviewedAt && <><dt>Reviewed</dt><dd>{when(v.reviewedAt)}</dd></>}
+              {v.blockchainHash && <><dt>Fingerprint</dt><dd style={{ fontFamily: "monospace", fontSize: 11 }}>{v.blockchainHash}</dd></>}
+            </dl>
+            {status === "pending" && (
+              <>
+                <ul className="admin-checklist">
+                  <li>Look the number up{lookup && <> on the <a href={lookup.url} target="_blank" rel="noopener noreferrer">{lookup.label}</a></>} and check the registered name matches “{v.companyName}”.</li>
+                  <li>Open the document: the name, number and address should match, and it shouldn't look edited.</li>
+                  <li>Check the website (if given) shows the same business and a real contact address.</li>
+                  <li>An ISBN alone does not prove a publisher is trustworthy; it only shows the number was issued.</li>
+                </ul>
+                <div className="admin-actions">
+                  <button className="admin-btn ok" onClick={() => approve(u)}>Approve</button>
+                  <button className="admin-btn danger" onClick={() => reject(u)}>Reject…</button>
+                </div>
+              </>
+            )}
           </div>
-          <button
-            onClick={() => setSidebarOpen(false)}
-            style={{ display: "none", background: "none", border: "none", color: "#94a3b8" }}
-          >
-            <X size={18} />
-          </button>
-        </div>
+        );
+      })}
+    </>
+  );
+};
 
-        <div className="admin-sidebar-user">
-          <div className="admin-sidebar-avatar">
-            {user?.profilePicture && user.profilePicture !== "default-avatar.png"
-              ? <img src={user.profilePicture} alt={user.name} />
-              : user?.name?.[0]?.toUpperCase()}
+// ───────────────────────── Content moderation ─────────────────────────
+const STATUS_TONE = { published: "good", archived: "bad", declined: "bad", draft: "", under_review: "warn", seen: "warn", cost_proposed: "info" };
+
+const ContentTab = ({ initialFlagged }) => {
+  const [filters, setFilters] = useState({ search: "", status: "", flagged: initialFlagged ? "true" : "" });
+  const [page, setPage] = useState(1);
+  const [rows, setRows] = useState([]);
+  const [pages, setPages] = useState(1);
+  const [threshold, setThreshold] = useState(20);
+  const [error, setError] = useState("");
+
+  const load = useCallback(() => {
+    const params = { page, ...Object.fromEntries(Object.entries(filters).filter(([, v]) => v)) };
+    axios.get(`${BASE_URL}/api/admin/books`, { params })
+      .then((r) => { setRows(r.data.data); setPages(r.data.pages); setThreshold(r.data.plagiarismThreshold); setError(""); })
+      .catch((e) => setError(errorOf(e, "Could not load books.")));
+  }, [filters, page]);
+  useEffect(() => {
+    const t = setTimeout(load, 250);
+    return () => clearTimeout(t);
+  }, [load]);
+
+  const unpublish = async (b) => {
+    const reason = window.prompt(`Unpublish "${b.title}"? Readers who bought it keep their record.\n\nReason (the author will see it):`);
+    if (!reason || !reason.trim()) return;
+    try { await axios.post(`${BASE_URL}/api/admin/books/${b._id}/unpublish`, { reason }); load(); }
+    catch (e) { alert(errorOf(e, "Could not unpublish.")); }
+  };
+  const remove = async (b) => {
+    const reason = window.prompt(`PERMANENTLY delete "${b.title}"? This can't be undone.\n\nReason (the author will see it):`);
+    if (!reason || !reason.trim()) return;
+    try { await axios.delete(`${BASE_URL}/api/admin/books/${b._id}`, { data: { reason } }); load(); }
+    catch (e) { alert(errorOf(e, "Could not delete.")); }
+  };
+  const set = (key) => (e) => { setPage(1); setFilters((f) => ({ ...f, [key]: e.target.value })); };
+
+  return (
+    <>
+      <Heading title="Content moderation" text="Find books and manuscripts that need action, and take them down with a reason." />
+      <div className="admin-toolbar">
+        <input className="input-field" placeholder="Search title" value={filters.search} onChange={set("search")} />
+        <select className="input-field" value={filters.status} onChange={set("status")}>
+          <option value="">Any status</option>
+          {["published", "draft", "under_review", "seen", "cost_proposed", "declined", "archived"].map((s) => (
+            <option key={s} value={s}>{s.replace("_", " ")}</option>
+          ))}
+        </select>
+        <label style={{ fontSize: 13, display: "flex", gap: 6, alignItems: "center" }}>
+          <input type="checkbox" checked={filters.flagged === "true"} onChange={(e) => { setPage(1); setFilters((f) => ({ ...f, flagged: e.target.checked ? "true" : "" })); }} />
+          Flagged for similarity (≥ {threshold}%)
+          <HelpTip title="Similarity flag" text="The plagiarism scan compares a manuscript against other books on BookConnect only. A high score means it is very similar to another book here; it is a lead to check, not proof of copying." />
+        </label>
+      </div>
+      {error && <p style={{ color: "var(--danger)" }}>{error}</p>}
+      <div className="glass-panel admin-table-wrap" style={{ padding: 0 }}>
+        <table className="admin-table">
+          <thead><tr><th>Title</th><th>Author</th><th>Status</th><th>Price</th><th>Similarity</th><th>Updated</th><th /></tr></thead>
+          <tbody>
+            {rows.length === 0 && <tr><td colSpan={7} style={{ color: "var(--text-muted)" }}>No books match.</td></tr>}
+            {rows.map((b) => (
+              <tr key={b._id}>
+                <td>{b.title}</td>
+                <td>{b.author?.name || "—"}</td>
+                <td><Pill tone={STATUS_TONE[b.status]}>{b.status.replace("_", " ")}</Pill></td>
+                <td>{b.isPaid ? money(b.price) : "Free"}</td>
+                <td>
+                  {b.plagiarismScore == null ? "—" : (
+                    <span title={(b.plagiarismMatches || []).map((m) => `${m.title} (${m.similarity}%)`).join(", ")}>
+                      <Pill tone={b.plagiarismScore >= threshold ? "bad" : "good"}>{b.plagiarismScore}%</Pill>
+                    </span>
+                  )}
+                </td>
+                <td>{when(b.updatedAt)}</td>
+                <td>
+                  <div className="admin-actions">
+                    {b.status === "published" && <button className="admin-btn danger" onClick={() => unpublish(b)}>Unpublish</button>}
+                    <button className="admin-btn danger" onClick={() => remove(b)}>Delete</button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <Pager page={page} pages={pages} onPage={setPage} />
+    </>
+  );
+};
+
+// ───────────────────────── Transactions ─────────────────────────
+const TransactionsTab = () => {
+  const [filters, setFilters] = useState({ type: "", status: "", onChain: "" });
+  const [page, setPage] = useState(1);
+  const [rows, setRows] = useState([]);
+  const [pages, setPages] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [totalAmount, setTotalAmount] = useState(0);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const params = { page, ...Object.fromEntries(Object.entries(filters).filter(([, v]) => v)) };
+    axios.get(`${BASE_URL}/api/admin/transactions`, { params })
+      .then((r) => { setRows(r.data.data); setPages(r.data.pages); setTotal(r.data.total); setTotalAmount(r.data.totalAmount); setError(""); })
+      .catch((e) => setError(errorOf(e, "Could not load payments.")));
+  }, [filters, page]);
+
+  const set = (key) => (e) => { setPage(1); setFilters((f) => ({ ...f, [key]: e.target.value })); };
+
+  return (
+    <>
+      <Heading title="Payments" text="Every payment on the platform. This list is read-only." />
+      <div className="admin-toolbar">
+        <select className="input-field" value={filters.type} onChange={set("type")}>
+          <option value="">All types</option>
+          <option value="book_purchase">Book purchase</option>
+          <option value="publishing_fee">Publishing fee</option>
+          <option value="p2p_transfer">Transfer</option>
+        </select>
+        <select className="input-field" value={filters.status} onChange={set("status")}>
+          <option value="">Any status</option>
+          <option value="completed">Completed</option>
+          <option value="pending">Pending</option>
+          <option value="failed">Failed</option>
+        </select>
+        <select className="input-field" value={filters.onChain} onChange={set("onChain")}>
+          <option value="">On-chain or not</option>
+          <option value="true">On-chain only</option>
+          <option value="false">In-app only</option>
+        </select>
+        <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>{total} payments · {money(totalAmount)}</span>
+      </div>
+      {error && <p style={{ color: "var(--danger)" }}>{error}</p>}
+      <div className="glass-panel admin-table-wrap" style={{ padding: 0 }}>
+        <table className="admin-table">
+          <thead><tr><th>When</th><th>Type</th><th>From</th><th>To</th><th>Amount</th><th>Status</th><th>On-chain</th></tr></thead>
+          <tbody>
+            {rows.length === 0 && <tr><td colSpan={7} style={{ color: "var(--text-muted)" }}>No payments match.</td></tr>}
+            {rows.map((t) => (
+              <tr key={t._id}>
+                <td>{when(t.createdAt)}</td>
+                <td>{t.type.replace("_", " ")}</td>
+                <td>{t.sender?.name || "—"}</td>
+                <td>{t.receiver?.name || "—"}</td>
+                <td>{money(t.amount)}</td>
+                <td><Pill tone={t.status === "completed" ? "good" : t.status === "failed" ? "bad" : "warn"}>{t.status}</Pill></td>
+                <td>
+                  {t.onChain
+                    ? <Pill tone="info">{t.network || "sepolia"}</Pill>
+                    : <span style={{ color: "var(--text-muted)" }}>no</span>}
+                  {t.onChain && t.txHash && <div style={{ fontFamily: "monospace", fontSize: 10, color: "var(--text-muted)" }}>{t.txHash.slice(0, 14)}…</div>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <Pager page={page} pages={pages} onPage={setPage} />
+    </>
+  );
+};
+
+// ───────────────────────── Health ─────────────────────────
+const HealthTab = () => {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    axios.get(`${BASE_URL}/api/admin/health`)
+      .then((r) => setData(r.data.data))
+      .catch((e) => setError(errorOf(e, "Could not load health.")));
+  }, []);
+
+  if (error) return <p style={{ color: "var(--danger)" }}>{error}</p>;
+  if (!data) return <p style={{ color: "var(--text-muted)" }}>Loading…</p>;
+
+  const tiles = [
+    ["Publishers awaiting verification", data.pendingVerifications],
+    ["Awaiting a publisher's review", data.awaitingReview],
+    ["Offers waiting for the author", data.openOffers],
+    ["Declined submissions", data.declined],
+    ["Failed payments", data.failedPayments],
+    [`Flagged manuscripts (≥ ${data.plagiarismThreshold}%)`, data.flaggedManuscripts],
+  ];
+
+  return (
+    <>
+      <Heading title="Platform health" text="Things that are stuck or have gone wrong." />
+      <div className="admin-grid">
+        {tiles.map(([label, n]) => (
+          <div key={label} className={`admin-attention ${n > 0 ? "hot" : ""}`} style={{ cursor: "default" }}>
+            <strong>{n}</strong><span>{label}</span>
           </div>
-          <div className="admin-user-details">
-            <span className="admin-user-name">{user?.name}</span>
-            <span className="admin-user-role"><ShieldCheck size={12} /> Master Admin</span>
-          </div>
-        </div>
-
-        <nav className="admin-sidebar-nav">
-          <div className="admin-nav-category">Main Management</div>
-          <button
-            className={`admin-nav-btn ${activeTab === "overview" ? "active" : ""}`}
-            onClick={() => { setActiveTab("overview"); setSidebarOpen(false); }}
-          >
-            <BarChart2 size={17} /><span>Command Center</span>
-          </button>
-          <button
-            className={`admin-nav-btn ${activeTab === "users" ? "active" : ""}`}
-            onClick={() => { setActiveTab("users"); setSidebarOpen(false); }}
-          >
-            <Users size={17} /><span>Users (All Roles)</span>
-            {stats?.users?.total !== undefined && <span className="nav-badge">{stats.users.total}</span>}
-          </button>
-          <button
-            className={`admin-nav-btn ${activeTab === "books" ? "active" : ""}`}
-            onClick={() => { setActiveTab("books"); setSidebarOpen(false); }}
-          >
-            <BookOpen size={17} /><span>Books & Manuscripts</span>
-            {stats?.books?.total !== undefined && <span className="nav-badge">{stats.books.total}</span>}
-          </button>
-
-          <div className="admin-nav-category">Publishers & Operations</div>
-          <button
-            className={`admin-nav-btn ${activeTab === "publishers" ? "active" : ""}`}
-            onClick={() => { setActiveTab("publishers"); setSidebarOpen(false); }}
-          >
-            <Building size={17} /><span>Publisher Center</span>
-          </button>
-          <button
-            className={`admin-nav-btn ${activeTab === "transactions" ? "active" : ""}`}
-            onClick={() => { setActiveTab("transactions"); setSidebarOpen(false); }}
-          >
-            <CreditCard size={17} /><span>Blockchain Ledger</span>
-          </button>
-          <button
-            className={`admin-nav-btn ${activeTab === "reviews" ? "active" : ""}`}
-            onClick={() => { setActiveTab("reviews"); setSidebarOpen(false); }}
-          >
-            <MessageSquare size={17} /><span>Reviews & Moderation</span>
-          </button>
-
-          <div className="admin-nav-category">Multi-Role Masquerade</div>
-          <button className="admin-nav-btn" onClick={() => setPersonaMode("author")}>
-            <Sparkles size={17} /><span>Author Studio</span>
-          </button>
-          <button className="admin-nav-btn" onClick={() => setPersonaMode("publisher")}>
-            <Building size={17} /><span>Publisher Desk</span>
-          </button>
-          <button className="admin-nav-btn" onClick={() => setPersonaMode("reader")}>
-            <BookMarked size={17} /><span>Reader VIP Library</span>
-          </button>
-        </nav>
-
-        <div className="admin-sidebar-footer">
-          <button className="admin-logout-btn" onClick={onLogout}>
-            <LogOut size={16} /><span>Sign Out</span>
-          </button>
-        </div>
-      </aside>
-
-      {/* ─── Main Content ───────────────────────────────────────────────────── */}
-      <div className="admin-main">
-        <header className="admin-topbar">
-          <div className="admin-topbar-left">
-            <button className="admin-mobile-toggle" onClick={() => setSidebarOpen(true)}>
-              <Layers size={22} />
-            </button>
-            <div className="admin-breadcrumb">
-              <span>Admin Console</span>
-              <ChevronRight size={14} />
-              <span className="admin-breadcrumb-title" style={{ textTransform: "capitalize" }}>{activeTab}</span>
-            </div>
-          </div>
-          <div className="admin-topbar-right">
-            <div className="admin-mode-pill">
-              <span className="admin-mode-dot" />
-              <span>Full Master Control</span>
-            </div>
-          </div>
-        </header>
-
-        <div className="admin-body">
-          {renderTabContent()}
-        </div>
+        ))}
       </div>
 
-      {/* ─── Edit User Modal ─────────────────────────────────────────────────── */}
-      {editUserModalOpen && selectedUser && (
-        <div className="admin-modal-overlay" onClick={() => setEditUserModalOpen(false)}>
-          <div className="admin-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="admin-modal-header">
-              <div className="admin-modal-title"><Edit3 size={18} /> Edit User: {selectedUser.name}</div>
-              <button className="admin-modal-close" onClick={() => setEditUserModalOpen(false)}><X size={18} /></button>
-            </div>
-            <div className="admin-modal-body">
-              <div className="admin-form-group">
-                <label className="admin-form-label">Full Name</label>
-                <input
-                  type="text"
-                  className="admin-form-input"
-                  value={editUserData.name || ""}
-                  onChange={(e) => setEditUserData({ ...editUserData, name: e.target.value })}
-                />
-              </div>
-              <div className="admin-form-group">
-                <label className="admin-form-label">Email Address</label>
-                <input
-                  type="email"
-                  className="admin-form-input"
-                  value={editUserData.email || ""}
-                  onChange={(e) => setEditUserData({ ...editUserData, email: e.target.value })}
-                />
-              </div>
-              <div className="admin-form-group">
-                <label className="admin-form-label">Platform Role</label>
-                <select
-                  className="admin-form-select"
-                  value={editUserData.role || "reader"}
-                  onChange={(e) => setEditUserData({ ...editUserData, role: e.target.value })}
-                >
-                  <option value="reader">Reader</option>
-                  <option value="author">Author</option>
-                  <option value="publisher">Publisher</option>
-                  <option value="admin">Administrator</option>
-                </select>
-              </div>
-              <div className="admin-form-group">
-                <label className="admin-form-label">Wallet Balance ($)</label>
-                <input
-                  type="number"
-                  className="admin-form-input"
-                  value={editUserData.walletBalance || 0}
-                  onChange={(e) => setEditUserData({ ...editUserData, walletBalance: parseFloat(e.target.value) || 0 })}
-                />
-              </div>
-              <div className="admin-form-group">
-                <label className="admin-form-label">Verification Status</label>
-                <select
-                  className="admin-form-select"
-                  value={editUserData.isVerified ? "true" : "false"}
-                  onChange={(e) => setEditUserData({ ...editUserData, isVerified: e.target.value === "true" })}
-                >
-                  <option value="true">Verified</option>
-                  <option value="false">Unverified</option>
-                </select>
-              </div>
-              <div className="admin-form-group">
-                <label className="admin-form-label">Bio</label>
-                <textarea
-                  rows="3"
-                  className="admin-form-textarea"
-                  value={editUserData.bio || ""}
-                  onChange={(e) => setEditUserData({ ...editUserData, bio: e.target.value })}
-                />
-              </div>
-            </div>
-            <div className="admin-modal-footer">
-              <button className="btn-secondary" onClick={() => setEditUserModalOpen(false)}>Cancel</button>
-              <button className="btn-admin-primary" onClick={handleSaveUserEdit}>Save Changes</button>
-            </div>
+      <div className="glass-panel admin-card">
+        <h3 style={{ fontSize: 14, margin: "0 0 10px" }}>Submissions waiting more than 14 days</h3>
+        {data.stuckSubmissions.length === 0 ? (
+          <p style={{ fontSize: 13, color: "var(--text-muted)", display: "flex", gap: 6, alignItems: "center" }}><CheckCircle size={14} /> None. Nothing is stuck.</p>
+        ) : (
+          <table className="admin-table">
+            <thead><tr><th>Title</th><th>Author</th><th>Publisher</th><th>Status</th><th>Last change</th></tr></thead>
+            <tbody>
+              {data.stuckSubmissions.map((b) => (
+                <tr key={b._id}><td>{b.title}</td><td>{b.author?.name}</td><td>{b.publisher?.name}</td><td><Pill tone="warn">{b.status.replace("_", " ")}</Pill></td><td>{when(b.updatedAt)}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <div className="glass-panel admin-card">
+        <h3 style={{ fontSize: 14, margin: "0 0 10px" }}>Failed payments</h3>
+        {data.failedTransactions.length === 0 ? (
+          <p style={{ fontSize: 13, color: "var(--text-muted)", display: "flex", gap: 6, alignItems: "center" }}><CheckCircle size={14} /> None.</p>
+        ) : (
+          <table className="admin-table">
+            <thead><tr><th>When</th><th>Type</th><th>From</th><th>To</th><th>Amount</th></tr></thead>
+            <tbody>
+              {data.failedTransactions.map((t) => (
+                <tr key={t._id}><td>{when(t.createdAt)}</td><td>{t.type.replace("_", " ")}</td><td>{t.sender?.name}</td><td>{t.receiver?.name}</td><td>{money(t.amount)}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </>
+  );
+};
+
+// ───────────────────────── Audit log ─────────────────────────
+const AuditTab = () => {
+  const [page, setPage] = useState(1);
+  const [rows, setRows] = useState([]);
+  const [pages, setPages] = useState(1);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    axios.get(`${BASE_URL}/api/admin/audit-log`, { params: { page } })
+      .then((r) => { setRows(r.data.data); setPages(r.data.pages); })
+      .catch((e) => setError(errorOf(e, "Could not load the log.")));
+  }, [page]);
+
+  return (
+    <>
+      <Heading title="Audit log" text="A permanent record of what admins did, and why." />
+      {error && <p style={{ color: "var(--danger)" }}>{error}</p>}
+      <div className="glass-panel admin-table-wrap" style={{ padding: 0 }}>
+        <table className="admin-table">
+          <thead><tr><th>When</th><th>Admin</th><th>Action</th><th>On</th><th>Details</th></tr></thead>
+          <tbody>
+            {rows.length === 0 && <tr><td colSpan={5} style={{ color: "var(--text-muted)" }}>Nothing recorded yet.</td></tr>}
+            {rows.map((r) => (
+              <tr key={r._id}>
+                <td>{when(r.createdAt)}</td>
+                <td>{r.admin?.name || "—"}</td>
+                <td><Pill>{r.action}</Pill></td>
+                <td>{r.targetLabel || r.targetId}</td>
+                <td>{r.details}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <Pager page={page} pages={pages} onPage={setPage} />
+    </>
+  );
+};
+
+// ───────────────────────── Shell ─────────────────────────
+const TABS = [
+  { id: "overview", label: "Overview", icon: BarChart2 },
+  { id: "users", label: "Users", icon: Users },
+  { id: "verification", label: "Publisher verification", icon: Shield },
+  { id: "content", label: "Content", icon: FileWarning },
+  { id: "transactions", label: "Payments", icon: DollarSign },
+  { id: "health", label: "Platform health", icon: Activity },
+  { id: "audit", label: "Audit log", icon: ScrollText },
+];
+
+const AdminDashboard = ({ user, onLogout }) => {
+  const [tab, setTab] = useState("overview");
+  const [flaggedFirst, setFlaggedFirst] = useState(false);
+  const [badges, setBadges] = useState({});
+  const [menuOpen, setMenuOpen] = useState(false); // sidebar drawer on phones
+
+  // counts shown on the sidebar; refreshed whenever the admin switches tab
+  useEffect(() => {
+    axios.get(`${BASE_URL}/api/admin/overview`)
+      .then((r) => {
+        const h = r.data.data.health;
+        setBadges({ verification: h.pendingVerifications, content: h.flaggedManuscripts, health: h.failedPayments });
+      })
+      .catch(() => {});
+  }, [tab]);
+
+  const go = (id, hint) => {
+    setFlaggedFirst(hint === "flagged");
+    setTab(id);
+    setMenuOpen(false);
+  };
+
+  return (
+    <div className="dashboard-wrapper admin-shell">
+      {menuOpen && <div className="sidebar-overlay" onClick={() => setMenuOpen(false)} />}
+      <aside className={`sidebar ${menuOpen ? "open" : ""}`}>
+        <div className="sidebar-header">
+          <div className="sidebar-logo"><BookOpen size={22} /><span>BookConnect</span></div>
+        </div>
+        <div className="sidebar-user">
+          <div className="sidebar-avatar" style={{ background: "var(--danger)" }}>{user?.name?.[0]?.toUpperCase()}</div>
+          <div className="sidebar-user-info">
+            <span className="sidebar-user-name">{user?.name}</span>
+            <span className="sidebar-role-badge" style={{ background: "var(--danger-bg)", color: "var(--danger)" }}>Admin</span>
           </div>
         </div>
-      )}
+        <nav className="sidebar-nav">
+          {TABS.map(({ id, label, icon }) => (
+            <button key={id} className={`sidebar-link ${tab === id ? "active" : ""}`} onClick={() => go(id)}>
+              {React.createElement(icon, { size: 18 })}<span>{label}</span>
+              {badges[id] > 0 && <span className="nav-badge">{badges[id]}</span>}
+            </button>
+          ))}
+        </nav>
+        <button className="sidebar-logout" onClick={onLogout}><LogOut size={16} /><span>Sign out</span></button>
+      </aside>
 
-      {/* ─── Edit Book Modal ─────────────────────────────────────────────────── */}
-      {editBookModalOpen && selectedBook && (
-        <div className="admin-modal-overlay" onClick={() => setEditBookModalOpen(false)}>
-          <div className="admin-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="admin-modal-header">
-              <div className="admin-modal-title"><Edit3 size={18} /> Edit Book: {selectedBook.title}</div>
-              <button className="admin-modal-close" onClick={() => setEditBookModalOpen(false)}><X size={18} /></button>
-            </div>
-            <div className="admin-modal-body">
-              <div className="admin-form-group">
-                <label className="admin-form-label">Book Title</label>
-                <input
-                  type="text"
-                  className="admin-form-input"
-                  value={editBookData.title || ""}
-                  onChange={(e) => setEditBookData({ ...editBookData, title: e.target.value })}
-                />
-              </div>
-              <div className="admin-form-group">
-                <label className="admin-form-label">Status</label>
-                <select
-                  className="admin-form-select"
-                  value={editBookData.status || "draft"}
-                  onChange={(e) => setEditBookData({ ...editBookData, status: e.target.value })}
-                >
-                  <option value="draft">Draft</option>
-                  <option value="under_review">Under Review</option>
-                  <option value="cost_proposed">Cost Proposed</option>
-                  <option value="published">Published</option>
-                  <option value="archived">Archived</option>
-                </select>
-              </div>
-              <div className="admin-form-group">
-                <label className="admin-form-label">Genre</label>
-                <select
-                  className="admin-form-select"
-                  value={editBookData.genre || "fiction"}
-                  onChange={(e) => setEditBookData({ ...editBookData, genre: e.target.value })}
-                >
-                  <option value="fiction">Fiction</option>
-                  <option value="non-fiction">Non-Fiction</option>
-                  <option value="science">Science</option>
-                  <option value="technology">Technology</option>
-                  <option value="history">History</option>
-                  <option value="poetry">Poetry</option>
-                  <option value="drama">Drama</option>
-                  <option value="thriller">Thriller</option>
-                </select>
-              </div>
-              <div className="admin-form-group">
-                <label className="admin-form-label">Price ($)</label>
-                <input
-                  type="number"
-                  className="admin-form-input"
-                  value={editBookData.price || 0}
-                  onChange={(e) => setEditBookData({ ...editBookData, price: parseFloat(e.target.value) || 0, isPaid: parseFloat(e.target.value) > 0 })}
-                />
-              </div>
-              <div className="admin-form-group">
-                <label className="admin-form-label">Publishing Fee / Cost ($)</label>
-                <input
-                  type="number"
-                  className="admin-form-input"
-                  value={editBookData.publishingCost || 0}
-                  onChange={(e) => setEditBookData({ ...editBookData, publishingCost: parseFloat(e.target.value) || 0 })}
-                />
-              </div>
-              <div className="admin-form-group">
-                <label className="admin-form-label">Description</label>
-                <textarea
-                  rows="3"
-                  className="admin-form-textarea"
-                  value={editBookData.description || ""}
-                  onChange={(e) => setEditBookData({ ...editBookData, description: e.target.value })}
-                />
-              </div>
-            </div>
-            <div className="admin-modal-footer">
-              <button className="btn-secondary" onClick={() => setEditBookModalOpen(false)}>Cancel</button>
-              <button className="btn-admin-primary" onClick={handleSaveBookEdit}>Save Changes</button>
-            </div>
-          </div>
+      <div className="dashboard-main">
+        <header className="dash-topbar" style={{ justifyContent: "flex-end", gap: 12 }}>
+          <button className="menu-btn" onClick={() => setMenuOpen(true)} aria-label="Open menu" style={{ marginRight: "auto" }}>
+            <Menu size={20} />
+          </button>
+          <span className="admin-note" style={{ fontSize: 12, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 6 }}>
+            <AlertCircle size={14} /> Admin actions are recorded in the audit log
+          </span>
+          <ThemeToggle />
+        </header>
+        <div className="dash-content animate-fade-in">
+          {tab === "overview" && <Overview go={go} />}
+          {tab === "users" && <UsersTab />}
+          {tab === "verification" && <VerificationTab />}
+          {tab === "content" && <ContentTab key={String(flaggedFirst)} initialFlagged={flaggedFirst} />}
+          {tab === "transactions" && <TransactionsTab />}
+          {tab === "health" && <HealthTab />}
+          {tab === "audit" && <AuditTab />}
         </div>
-      )}
-
-      {/* ─── Inspect Content Modal (VIP Reader Access) ────────────────────────── */}
-      {inspectBookModalOpen && selectedBook && (
-        <div className="admin-modal-overlay" onClick={() => setInspectBookModalOpen(false)}>
-          <div className="admin-modal" style={{ maxWidth: 720 }} onClick={(e) => e.stopPropagation()}>
-            <div className="admin-modal-header">
-              <div className="admin-modal-title">
-                <Eye size={18} color="#34d399" /> Free Admin Content Inspection: {selectedBook.title}
-              </div>
-              <button className="admin-modal-close" onClick={() => setInspectBookModalOpen(false)}><X size={18} /></button>
-            </div>
-            <div className="admin-modal-body">
-              <div style={{ display: "flex", gap: 16, alignItems: "flex-start", marginBottom: 16 }}>
-                <img
-                  src={selectedBook.coverImage || "https://picsum.photos/seed/book/100/150"}
-                  alt={selectedBook.title}
-                  style={{ width: 80, height: 115, objectFit: "cover", borderRadius: 8 }}
-                />
-                <div>
-                  <h3 style={{ margin: "0 0 6px 0", color: "#fff" }}>{selectedBook.title}</h3>
-                  <div style={{ fontSize: 13, color: "#94a3b8" }}>
-                    Author: {selectedBook.author?.name || "Unknown"} · Status: <strong>{selectedBook.status}</strong>
-                  </div>
-                  <div style={{ fontSize: 13, color: "#94a3b8", marginTop: 4 }}>
-                    Genre: {selectedBook.genre} · Price: {selectedBook.isPaid ? `$${selectedBook.price}` : "Free"}
-                  </div>
-                </div>
-              </div>
-
-              <div style={{ background: "#0f172a", padding: 18, borderRadius: 10, border: "1px solid rgba(255, 255, 255, 0.08)" }}>
-                <h4 style={{ margin: "0 0 8px 0", color: "#cbd5e1" }}>Description</h4>
-                <p style={{ margin: 0, fontSize: 13.5, color: "#94a3b8", lineHeight: 1.6 }}>
-                  {selectedBook.description || "No description provided."}
-                </p>
-              </div>
-
-              {selectedBook.content && (
-                <div style={{ background: "#0f172a", padding: 18, borderRadius: 10, border: "1px solid rgba(255, 255, 255, 0.08)" }}>
-                  <h4 style={{ margin: "0 0 8px 0", color: "#cbd5e1" }}>Raw Manuscript Content</h4>
-                  <div style={{ maxHeight: 200, overflowY: "auto", fontSize: 13, color: "#cbd5e1", whiteSpace: "pre-wrap", lineHeight: 1.6 }}>
-                    {selectedBook.content}
-                  </div>
-                </div>
-              )}
-
-              {selectedBook.chapters && selectedBook.chapters.length > 0 && (
-                <div style={{ background: "#0f172a", padding: 18, borderRadius: 10, border: "1px solid rgba(255, 255, 255, 0.08)" }}>
-                  <h4 style={{ margin: "0 0 8px 0", color: "#cbd5e1" }}>Chapters ({selectedBook.chapters.length})</h4>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                    {selectedBook.chapters.map((ch, idx) => (
-                      <div key={idx} style={{ padding: 10, background: "rgba(255, 255, 255, 0.03)", borderRadius: 6 }}>
-                        <div style={{ fontWeight: 600, color: "#f8fafc", fontSize: 13 }}>{ch.title}</div>
-                        <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 4, maxHeight: 80, overflowY: "hidden" }}>
-                          {ch.content}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-            <div className="admin-modal-footer">
-              <button className="btn-secondary" onClick={() => setInspectBookModalOpen(false)}>Close</button>
-              {selectedBook.status !== "published" && (
-                <button
-                  className="btn-admin-primary"
-                  onClick={() => {
-                    handleQuickStatusChange(selectedBook._id, "published");
-                    setInspectBookModalOpen(false);
-                  }}
-                >
-                  Publish This Book Now
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      </div>
     </div>
   );
 };

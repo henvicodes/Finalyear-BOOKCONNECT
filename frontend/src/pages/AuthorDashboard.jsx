@@ -3,14 +3,25 @@ import axios from "axios";
 import {
   BookOpen, Upload, Star, Shield, TrendingUp, Eye, MessageCircle, BarChart2,
   Clock, CheckCircle, AlertCircle, Plus, FileText, Lock, Sparkles, ArrowUpRight,
-  Send, User, ArrowLeft, RefreshCw, HelpCircle, BookMarked, Wallet, DollarSign
+  Send, User, ArrowLeft, RefreshCw, HelpCircle, BookMarked, Wallet, DollarSign, Layers
 } from "lucide-react";
 import ChatInterface from "../components/ChatInterface";
+import ThemeToggle from "../components/ThemeToggle";
+import WelcomeBanner from "../components/WelcomeBanner";
+import HelpTip from "../components/HelpTip";
+import ChapterManager from "../components/books/ChapterManager";
 import confetti from "canvas-confetti";
 import { useAuth } from "../context/AuthContext";
-import { connectMetaMask, getConnectedAccount, isMetaMaskInstalled } from "../services/web3";
+import { connectMetaMask, getConnectedAccount, waitForEthereum } from "../services/web3";
+import {
+  registerManuscriptOnChain,
+  updateManuscriptOnChain,
+  verifyManuscriptOnChain,
+  CONTRACT_ADDRESS,
+} from "../services/manuscriptRegistry";
 
-const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+import { API_URL } from "../config";
+const BASE_URL = API_URL;
 
 // Format helper
 const fmt = (n) => n >= 1000 ? (n / 1000).toFixed(1) + "K" : String(n || 0);
@@ -47,13 +58,120 @@ const Skel = () => (
   <div className="skel-row" style={{ height: 48, background: "rgba(255,255,255,0.03)", borderRadius: 8, marginBottom: 8 }} />
 );
 
+// Live preview of the cover image URL currently typed/picked — so authors
+// can see exactly what will be saved instead of only finding out later
+// (e.g. after picking a theme preset that quietly replaced a custom URL).
+const CoverPreview = ({ url }) => {
+  // Tracks which URL last failed to load, rather than a plain boolean, so
+  // switching to a new URL is automatically treated as "not failed" on the
+  // very next render — no effect needed to reset it.
+  const [erroredUrl, setErroredUrl] = useState(null);
+  const failed = erroredUrl === url;
+
+  if (!url) return null;
+  return (
+    <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 10 }}>
+      <div style={{
+        width: 44, height: 60, borderRadius: 6, overflow: "hidden", flexShrink: 0,
+        background: "var(--gray-100)", display: "flex", alignItems: "center", justifyContent: "center",
+        border: "1px solid var(--border-light)"
+      }}>
+        {failed ? (
+          <AlertCircle size={16} color="var(--danger)" />
+        ) : (
+          <img
+            src={url}
+            alt="Cover preview"
+            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+            onError={() => setErroredUrl(url)}
+          />
+        )}
+      </div>
+      <span style={{ fontSize: 11, color: failed ? "var(--danger)" : "var(--text-muted)" }}>
+        {failed ? "This URL didn't load — double-check the link." : "This is what will be saved as the cover."}
+      </span>
+    </div>
+  );
+};
+
+// Every genre the Book model accepts (backend/models/Book.js).
+const BOOK_GENRES = [
+  "fiction", "non-fiction", "science", "technology", "poetry", "drama", "history",
+  "biography", "mystery", "romance", "thriller", "fantasy", "horror", "children",
+];
+
+// "Suggest genre" — asks the trained genre classifier (backend
+// POST /api/ai/suggest-genre; TF-IDF + logistic regression trained on the
+// CMU Book Summary Dataset) to read the manuscript text and offer its top 3
+// genres. The author stays in control: clicking a chip just fills the select.
+const GenreSuggester = ({ text, token, onPick }) => {
+  const [loading, setLoading] = useState(false);
+  const [suggestions, setSuggestions] = useState(null);
+  const [error, setError] = useState("");
+
+  const suggest = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const { data } = await axios.post(
+        `${BASE_URL}/api/ai/suggest-genre`,
+        { text },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setSuggestions(data.suggestions);
+    } catch (err) {
+      setSuggestions(null);
+      setError(err.response?.data?.message || "Could not get a suggestion right now.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{ marginTop: 6 }}>
+      <button
+        type="button"
+        onClick={suggest}
+        disabled={loading}
+        style={{
+          background: "none", border: "none", padding: 0, cursor: loading ? "wait" : "pointer",
+          fontSize: 12, fontWeight: 600, color: "var(--accent-600)", display: "inline-flex", alignItems: "center", gap: 4
+        }}
+      >
+        <Sparkles size={12} /> {loading ? "Reading your manuscript..." : "Suggest genre from my text"}
+      </button>
+      {error && <div style={{ fontSize: 11, color: "var(--danger)", marginTop: 4 }}>{error}</div>}
+      {suggestions && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6, alignItems: "center" }}>
+          {suggestions.map(s => (
+            <button
+              key={s.genre}
+              type="button"
+              onClick={() => onPick(s.genre)}
+              title="Click to use this genre"
+              style={{
+                padding: "3px 10px", fontSize: 11, borderRadius: 20, cursor: "pointer", textTransform: "capitalize",
+                border: "1px solid var(--accent-200)", background: "var(--accent-50)", color: "var(--accent-700)", fontWeight: 600
+              }}
+            >
+              {s.genre} · {Math.round(s.probability * 100)}%
+            </button>
+          ))}
+          <span style={{ fontSize: 10, color: "var(--text-muted)" }}>
+            Trained model — a suggestion only.
+          </span>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ─── BOOK ROW COMPONENT ──────────────────────────────────────────────────────
-const BookRow = ({ book, onEdit, onPayCost, onBlockchain, setActive }) => {
+const BookRow = ({ book, onEdit, onPayCost, setActive }) => {
   const isPublished = book.status === "published";
   const isReview = book.status === "under_review";
   const isSeen = book.status === "seen";
   const isCostProposed = book.status === "cost_proposed";
-  const isDraft = book.status === "draft" || !book.status;
 
   let statusLabel = "Draft";
   let statusClass = "draft";
@@ -70,6 +188,9 @@ const BookRow = ({ book, onEdit, onPayCost, onBlockchain, setActive }) => {
   } else if (isCostProposed) {
     statusLabel = "Cost Proposed";
     statusClass = "review";
+  } else if (book.status === "declined") {
+    statusLabel = "Declined";
+    statusClass = "draft";
   }
 
   return (
@@ -84,7 +205,7 @@ const BookRow = ({ book, onEdit, onPayCost, onBlockchain, setActive }) => {
       <span className={`book-status ${statusClass}`}>{statusLabel}</span>
       
       {isCostProposed && (
-        <span style={{ fontSize: 11, fontWeight: "bold", color: "#f59e0b", background: "rgba(245,158,11,0.1)", padding: "2px 6px", borderRadius: 4 }}>
+        <span style={{ fontSize: 11, fontWeight: "bold", color: "var(--warning)", background: "rgba(217, 119, 6,0.1)", padding: "2px 6px", borderRadius: 4 }}>
           ${book.publishingCost} fee
         </span>
       )}
@@ -95,7 +216,7 @@ const BookRow = ({ book, onEdit, onPayCost, onBlockchain, setActive }) => {
         {isCostProposed ? (
           <button 
             className="row-action-btn secure" 
-            style={{ background: "#10b981", color: "#fff", display: "flex", alignItems: "center", gap: 3 }}
+            style={{ background: "var(--success)", color: "#fff", display: "flex", alignItems: "center", gap: 3 }}
             onClick={() => onPayCost(book.id || book._id)}
           >
             <DollarSign size={12} /> Pay & Publish
@@ -185,20 +306,20 @@ const InlineAIWriter = ({ content, setContent, bookId, token, onEvaluateSuccess,
   };
 
   return (
-    <div className="glass-panel" style={{ padding: 20, border: "1px solid rgba(124, 58, 237, 0.15)", background: "rgba(124, 58, 237, 0.02)" }}>
-      <h3 style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 14, color: "#7c3aed", marginBottom: 12 }}>
+    <div className="glass-panel" style={{ padding: 20, border: "1px solid rgba(79, 70, 229, 0.15)", background: "rgba(79, 70, 229, 0.02)" }}>
+      <h3 style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 14, color: "var(--accent-600)", marginBottom: 12 }}>
         <Sparkles size={16} /> AI Writing Assistant (Inline)
       </h3>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         <div>
-          <label style={{ fontSize: 11, fontWeight: "bold", color: "#64748b", display: "block", marginBottom: 6 }}>REWRITE SELECTION</label>
+          <label style={{ fontSize: 11, fontWeight: "bold", color: "var(--text-secondary)", display: "block", marginBottom: 6 }}>REWRITE SELECTION</label>
           <div style={{ display: "flex", gap: 8 }}>
             <select 
               value={assistType} 
               onChange={e => setAssistType(e.target.value)}
               className="input-field" 
-              style={{ flex: 1, padding: "6px 10px", fontSize: 12, borderRadius: 6, border: "1px solid #ede9fe" }}
+              style={{ flex: 1, padding: "6px 10px", fontSize: 12, borderRadius: 6, border: "1px solid var(--accent-100)" }}
             >
               <option value="improve">Refine Flow & Tone</option>
               <option value="simplify">Simplify Vocabulary</option>
@@ -210,7 +331,7 @@ const InlineAIWriter = ({ content, setContent, bookId, token, onEvaluateSuccess,
               onClick={handleRewrite} 
               disabled={isAssisting} 
               className="btn-primary" 
-              style={{ padding: "6px 14px", fontSize: 12, borderRadius: 6, background: "#7c3aed" }}
+              style={{ padding: "6px 14px", fontSize: 12, borderRadius: 6, background: "var(--accent-600)" }}
             >
               {isAssisting ? "Thinking..." : "Rewrite"}
             </button>
@@ -218,20 +339,20 @@ const InlineAIWriter = ({ content, setContent, bookId, token, onEvaluateSuccess,
         </div>
 
         {aiSuggestion && (
-          <div style={{ padding: 12, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(124,58,237,0.15)", borderRadius: 8 }}>
-            <span style={{ fontSize: 10, color: "#7c3aed", fontWeight: "bold", display: "block" }}>SUGGESTION:</span>
-            <p style={{ fontSize: 12, color: "#1a1a2e", marginTop: 4, whiteSpace: "pre-wrap" }}>{aiSuggestion}</p>
+          <div style={{ padding: 12, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(79,70,229,0.15)", borderRadius: 8 }}>
+            <span style={{ fontSize: 10, color: "var(--accent-600)", fontWeight: "bold", display: "block" }}>SUGGESTION:</span>
+            <p style={{ fontSize: 12, color: "var(--text-primary)", marginTop: 4, whiteSpace: "pre-wrap" }}>{aiSuggestion}</p>
             <button 
               type="button" 
               onClick={applySuggestion} 
-              style={{ marginTop: 8, padding: "4px 10px", fontSize: 11, background: "#7c3aed", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}
+              style={{ marginTop: 8, padding: "4px 10px", fontSize: 11, background: "var(--accent-600)", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}
             >
               Apply Rewrite
             </button>
           </div>
         )}
 
-        <hr style={{ border: "none", borderTop: "1px solid rgba(0,0,0,0.06)" }} />
+        <hr style={{ border: "none", borderTop: "1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)" }} />
 
         <div>
           <button 
@@ -248,23 +369,23 @@ const InlineAIWriter = ({ content, setContent, bookId, token, onEvaluateSuccess,
           {scanResult && (
             <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                <div style={{ background: "rgba(124, 58, 237, 0.05)", padding: 8, borderRadius: 6, textAlign: "center", border: "1px solid rgba(124, 58, 237, 0.1)" }}>
-                  <span style={{ fontSize: 9, color: "#64748b" }}>QUALITY SCORE</span>
-                  <div style={{ fontSize: 16, fontWeight: "bold", color: "#7c3aed" }}>{scanResult.qualityScore}%</div>
+                <div style={{ background: "rgba(79, 70, 229, 0.05)", padding: 8, borderRadius: 6, textAlign: "center", border: "1px solid rgba(79, 70, 229, 0.1)" }}>
+                  <span style={{ fontSize: 9, color: "var(--text-secondary)" }}>QUALITY SCORE</span>
+                  <div style={{ fontSize: 16, fontWeight: "bold", color: "var(--accent-600)" }}>{scanResult.qualityScore}%</div>
                 </div>
-                <div style={{ background: "rgba(14, 165, 233, 0.05)", padding: 8, borderRadius: 6, textAlign: "center", border: "1px solid rgba(14, 165, 233, 0.1)" }}>
-                  <span style={{ fontSize: 9, color: "#64748b" }}>READABILITY</span>
-                  <div style={{ fontSize: 13, fontWeight: "bold", color: "#0ea5e9", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{scanResult.readabilityScore}</div>
+                <div style={{ background: "rgba(8, 145, 178, 0.05)", padding: 8, borderRadius: 6, textAlign: "center", border: "1px solid rgba(8, 145, 178, 0.1)" }}>
+                  <span style={{ fontSize: 9, color: "var(--text-secondary)" }}>READABILITY</span>
+                  <div style={{ fontSize: 13, fontWeight: "bold", color: "var(--info)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{scanResult.readabilityScore}</div>
                 </div>
               </div>
 
-              <div style={{ background: scanResult.plagiarismScore > 15 ? "rgba(239,68,68,0.05)" : "rgba(16,185,129,0.05)", padding: 8, borderRadius: 6, border: "1px solid rgba(0,0,0,0.05)" }}>
+              <div style={{ background: scanResult.plagiarismScore > 15 ? "rgba(220,38,38,0.05)" : "rgba(22, 163, 74,0.05)", padding: 8, borderRadius: 6, border: "1px solid color-mix(in srgb, var(--text-primary) 5%, transparent)" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11 }}>
                   <span>Plagiarism:</span>
-                  <strong style={{ color: scanResult.plagiarismScore > 15 ? "#ef4444" : "#10b981" }}>{scanResult.plagiarismScore}%</strong>
+                  <strong style={{ color: scanResult.plagiarismScore > 15 ? "var(--danger)" : "var(--success)" }}>{scanResult.plagiarismScore}%</strong>
                 </div>
                 {scanResult.plagiarismMatches && scanResult.plagiarismMatches.length > 0 && (
-                  <div style={{ fontSize: 9, color: "#ef4444", marginTop: 4 }}>
+                  <div style={{ fontSize: 9, color: "var(--danger)", marginTop: 4 }}>
                     ⚠️ Overlap with "{scanResult.plagiarismMatches[0].title}" ({scanResult.plagiarismMatches[0].similarity}% match)
                   </div>
                 )}
@@ -300,11 +421,13 @@ export const AuthorOverview = ({ user, setActive, books, loading, setEditingBook
         </button>
       </div>
 
+      <WelcomeBanner role="author" userId={user?._id} onOpenGuide={() => setActive("help")} />
+
       <div className="stats-row">
-        <StatCard icon={<BookOpen size={20} />} label="Total Books" value={loading ? "…" : books.length} color="#7c3aed" />
-        <StatCard icon={<Eye size={20} />} label="Total Reads" value={loading ? "…" : fmt(totalReads)} color="#0ea5e9" />
-        <StatCard icon={<CheckCircle size={20} />} label="Published" value={loading ? "…" : publishedBooks.length} color="#059669" />
-        <StatCard icon={<Star size={20} />} label="Avg Quality Score" value={loading ? "…" : avgRating} color="#f59e0b" />
+        <StatCard icon={<BookOpen size={20} />} label="Total Books" value={loading ? "…" : books.length} color="var(--accent-600)" />
+        <StatCard icon={<Eye size={20} />} label="Total Reads" value={loading ? "…" : fmt(totalReads)} color="var(--info)" />
+        <StatCard icon={<CheckCircle size={20} />} label="Published" value={loading ? "…" : publishedBooks.length} color="var(--success)" />
+        <StatCard icon={<Star size={20} />} label="Avg Readability Score" value={loading ? "…" : avgRating} color="var(--warning)" />
       </div>
 
       {!loading && books.length > 0 && (
@@ -325,7 +448,7 @@ export const AuthorOverview = ({ user, setActive, books, loading, setEditingBook
             [1, 2, 3].map(i => <Skel key={i} />)
           ) : books.length === 0 ? (
             <p className="empty-text">
-              No books yet. <span className="action-text" onClick={() => setActive("upload")} style={{ color: "#7c3aed", cursor: "pointer", textDecoration: "underline" }}>Upload your first book →</span>
+              No books yet. <span className="action-text" onClick={() => setActive("upload")} style={{ color: "var(--accent-600)", cursor: "pointer", textDecoration: "underline" }}>Upload your first book →</span>
             </p>
           ) : (
             books.slice(0, 4).map((b) => (
@@ -334,7 +457,6 @@ export const AuthorOverview = ({ user, setActive, books, loading, setEditingBook
                 book={b}
                 onEdit={(id) => { setEditingBookId(id); setActive("editbook"); }}
                 onPayCost={onPayCost}
-                onBlockchain={() => setActive("blockchain")}
                 setActive={setActive}
               />
             ))
@@ -350,15 +472,15 @@ export const AuthorOverview = ({ user, setActive, books, loading, setEditingBook
           ) : (
             <div className="activity-list">
               {publishedBooks.slice(0, 2).map((b) => (
-                <ActivityItem key={b._id} icon={<BookOpen size={14} />} text={`"${b.title}" is live on the library`} time="Published" color="#059669" />
+                <ActivityItem key={b._id} icon={<BookOpen size={14} />} text={`"${b.title}" is live on the library`} time="Published" color="var(--success)" />
               ))}
               {books.filter(b => b.status === "under_review").slice(0, 2).map((b) => (
-                <ActivityItem key={b._id} icon={<Clock size={14} />} text={`Submitted "${b.title}" to publisher`} time="Reviewing" color="#f59e0b" />
+                <ActivityItem key={b._id} icon={<Clock size={14} />} text={`Submitted "${b.title}" to publisher`} time="Reviewing" color="var(--warning)" />
               ))}
               {books.filter(b => b.blockchainHash).slice(0, 1).map((b) => (
-                <ActivityItem key={`bc-${b._id}`} icon={<Shield size={14} />} text={`"${b.title}" secured on Ethereum`} time="Web3 Verified" color="#7c3aed" />
+                <ActivityItem key={`bc-${b._id}`} icon={<Shield size={14} />} text={`"${b.title}" secured on Ethereum`} time="Web3 Verified" color="var(--accent-600)" />
               ))}
-              <ActivityItem icon={<Sparkles size={14} />} text="AI Writing Assistant loaded in editor panels" time="System Ready" color="#0ea5e9" />
+              <ActivityItem icon={<Sparkles size={14} />} text="AI Writing Assistant loaded in editor panels" time="System Ready" color="var(--info)" />
             </div>
           )}
         </div>
@@ -368,19 +490,19 @@ export const AuthorOverview = ({ user, setActive, books, loading, setEditingBook
         <h3>Quick Actions</h3>
         <div className="actions-row">
           <button className="action-card" onClick={() => setActive("upload")}>
-            <Upload size={22} color="#7c3aed" />
+            <Upload size={22} color="var(--accent-600)" />
             <span>Upload Book</span>
           </button>
           <button className="action-card" onClick={() => setActive("messages")}>
-            <MessageCircle size={22} color="#0ea5e9" />
+            <MessageCircle size={22} color="var(--info)" />
             <span>Publishers Chat</span>
           </button>
           <button className="action-card" onClick={() => setActive("blockchain")}>
-            <Shield size={22} color="#059669" />
+            <Shield size={22} color="var(--success)" />
             <span>Verify Ownership</span>
           </button>
           <button className="action-card" onClick={() => setActive("analytics")}>
-            <TrendingUp size={22} color="#f59e0b" />
+            <TrendingUp size={22} color="var(--warning)" />
             <span>Analytics</span>
           </button>
         </div>
@@ -408,7 +530,7 @@ export const AuthorMyBooks = ({ books, loading, setActive, setEditingBookId, onP
       <div className="dash-panel" style={{ maxWidth: "100%" }}>
         <div className="panel-header">
           <h3>All Manuscripts ({books.length})</h3>
-          <span style={{ fontSize: 12, color: "#94a3b8" }}>
+          <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
             Published: <strong>{publishedBooks.length}</strong>
           </span>
         </div>
@@ -417,8 +539,8 @@ export const AuthorMyBooks = ({ books, loading, setActive, setEditingBookId, onP
           [1, 2, 3, 4].map(i => <Skel key={i} />)
         ) : books.length === 0 ? (
           <div style={{ textAlign: "center", padding: "40px 0" }}>
-            <BookMarked size={48} color="#4b5563" style={{ marginBottom: 12 }} />
-            <p style={{ color: "#94a3b8", fontSize: 14 }}>No books uploaded yet.</p>
+            <BookMarked size={48} color="var(--gray-600)" style={{ marginBottom: 12 }} />
+            <p style={{ color: "var(--text-muted)", fontSize: 14 }}>No books uploaded yet.</p>
             <button onClick={() => setActive("upload")} className="btn-primary-dash" style={{ marginTop: 12, display: "inline-flex" }}>
               Upload your first book
             </button>
@@ -426,14 +548,14 @@ export const AuthorMyBooks = ({ books, loading, setActive, setEditingBookId, onP
         ) : (
           <div className="books-list-container">
             {books.map((b) => (
-              <div key={b._id} className="book-row-full" style={{ display: "flex", alignItems: "center", justify: "space-between", padding: "10px 0", borderBottom: "1px solid rgba(0,0,0,0.03)" }}>
+              <div key={b._id} className="book-row-full" style={{ display: "flex", alignItems: "center", justify: "space-between", padding: "10px 0", borderBottom: "1px solid color-mix(in srgb, var(--text-primary) 3%, transparent)" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <div className="book-row-cover" style={{ width: 34, height: 44, background: "#f3f0ff", display: "flex", alignItems: "center", justifyContent: "center", color: "#7c3aed", borderRadius: 6 }}>
+                  <div className="book-row-cover" style={{ width: 34, height: 44, background: "var(--accent-50)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--accent-600)", borderRadius: 6 }}>
                     <BookOpen size={16} />
                   </div>
                   <div>
                     <span className="book-row-title" style={{ display: "block", fontSize: 13, fontWeight: "bold" }}>{b.title}</span>
-                    <span className="book-row-genre" style={{ fontSize: 10, color: "#94a3b8", textTransform: "capitalize" }}>
+                    <span className="book-row-genre" style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "capitalize" }}>
                       {b.genre || "Fiction"} · Created: {new Date(b.createdAt).toLocaleDateString("en-IN", { month: "short", year: "numeric" })}
                     </span>
                   </div>
@@ -441,17 +563,23 @@ export const AuthorMyBooks = ({ books, loading, setActive, setEditingBookId, onP
 
                 <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
                   <span className={`book-status ${b.status === "published" ? "published" : b.status === "under_review" || b.status === "seen" || b.status === "cost_proposed" ? "review" : "draft"}`}>
-                    {b.status === "published" ? "Published" : b.status === "under_review" ? "Reviewing" : b.status === "seen" ? "Seen" : b.status === "cost_proposed" ? "Proposed" : "Draft"}
+                    {b.status === "published" ? "Published" : b.status === "under_review" ? "Reviewing" : b.status === "seen" ? "Read by publisher" : b.status === "cost_proposed" ? "Offer received" : b.status === "declined" ? "Declined" : "Draft"}
                   </span>
+
+                  {b.status === "declined" && (
+                    <span style={{ fontSize: 11, color: "var(--danger)", maxWidth: 240 }} title={b.declineReason || ""}>
+                      {b.declineReason ? `Publisher said: ${b.declineReason}` : "Publisher declined — edit and send to another."}
+                    </span>
+                  )}
                   
                   {b.status === "cost_proposed" && (
-                    <span style={{ fontSize: 11, fontWeight: "bold", color: "#f59e0b" }}>
-                      Proposed fee: ${b.publishingCost}
+                    <span style={{ fontSize: 11, fontWeight: "bold", color: "var(--warning)" }}>
+                      Publisher's offer: ${b.publishingCost}
                     </span>
                   )}
 
                   <span className="book-rating" style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12 }}>
-                    <Star size={12} fill={b.qualityScore ? "currentColor" : "none"} color="#f59e0b" />
+                    <Star size={12} fill={b.qualityScore ? "currentColor" : "none"} color="var(--warning)" />
                     {b.qualityScore ? `${b.qualityScore}/100` : "No Scan"}
                   </span>
                   
@@ -459,7 +587,7 @@ export const AuthorMyBooks = ({ books, loading, setActive, setEditingBookId, onP
                     {b.status === "cost_proposed" ? (
                       <button 
                         className="btn-primary-dash" 
-                        style={{ padding: "5px 10px", fontSize: 11, background: "#10b981" }}
+                        style={{ padding: "5px 10px", fontSize: 11, background: "var(--success)" }}
                         onClick={() => onPayCost(b._id)}
                       >
                         Pay & Publish
@@ -479,8 +607,8 @@ export const AuthorMyBooks = ({ books, loading, setActive, setEditingBookId, onP
                       style={{ 
                         padding: "6px 12px", 
                         fontSize: "0.8rem", 
-                        background: b.blockchainHash ? "rgba(16, 185, 129, 0.1)" : "rgba(124, 58, 237, 0.1)", 
-                        color: b.blockchainHash ? "#10b981" : "#a78bfa",
+                        background: b.blockchainHash ? "rgba(22, 163, 74, 0.1)" : "rgba(79, 70, 229, 0.1)", 
+                        color: b.blockchainHash ? "var(--success)" : "var(--accent-300)",
                         border: "none",
                         borderRadius: 6,
                         cursor: "pointer",
@@ -626,24 +754,25 @@ export const AuthorUploadBook = ({ token, setActive, fetchBooks }) => {
               <div>
                 <label className="form-label">Genre</label>
                 <select className="input-field" value={genre} onChange={e => setGenre(e.target.value)} style={{ textTransform: "capitalize" }}>
-                  <option value="fiction">Fiction</option>
-                  <option value="non-fiction">Non-Fiction</option>
-                  <option value="science">Science</option>
-                  <option value="technology">Technology</option>
-                  <option value="poetry">Poetry</option>
-                  <option value="mystery">Mystery</option>
-                  <option value="romance">Romance</option>
+                  {BOOK_GENRES.map(g => <option key={g} value={g}>{g}</option>)}
                 </select>
+                <GenreSuggester text={content} token={token} onPick={setGenre} />
               </div>
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
               <div>
-                <label className="form-label">Select Target Publisher</label>
+                <label className="form-label">
+                  Select Target Publisher
+                  <HelpTip
+                    title="What happens next?"
+                    text="The publisher reviews your manuscript and may propose a publishing fee. You pay it from your wallet balance and the book goes live."
+                  />
+                </label>
                 <select className="input-field" value={selectedPublisher} onChange={e => setSelectedPublisher(e.target.value)}>
                   <option value="">-- Choose Publisher --</option>
                   {publishers.map(p => (
-                    <option key={p._id} value={p._id}>{p.name}</option>
+                    <option key={p._id} value={p._id}>{p.name}{p.publisherVerification?.isVerified ? " ✓ Verified" : " (not verified)"}</option>
                   ))}
                 </select>
               </div>
@@ -671,28 +800,29 @@ export const AuthorUploadBook = ({ token, setActive, fetchBooks }) => {
                   value={coverImage}
                   onChange={e => setCoverImage(e.target.value)}
                 />
+                <CoverPreview url={coverImage} />
               </div>
               <div>
                 <label className="form-label">Cover Theme Preset</label>
-                <select 
-                  className="input-field" 
+                <select
+                  className="input-field"
                   onChange={e => {
-                    if (e.target.value) {
-                      setCoverImage(e.target.value);
-                    } else {
-                      setCoverImage("");
-                    }
+                    if (e.target.value) setCoverImage(e.target.value);
+                    e.target.value = "";
                   }}
-                  value={coverImage}
+                  value=""
                 >
                   <option value="">-- Choose A Theme Style --</option>
-                  <option value={`https://picsum.photos/seed/${encodeURIComponent(title || "book")}/300/450`}>Automatic Title Art (Picsum)</option>
+                  <option value={`https://picsum.photos/seed/${encodeURIComponent(title || "book")}/300/450`}>Automatic Title Art (Picsum — random stock photo)</option>
                   <option value="https://images.unsplash.com/photo-1541701494587-cb58502866ab?q=80&w=300&auto=format&fit=crop">Modern Abstract (Vibrant Art)</option>
                   <option value="https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=300&auto=format&fit=crop">Digital Technology (Tech & Code)</option>
                   <option value="https://images.unsplash.com/photo-1544947950-fa07a98d237f?q=80&w=300&auto=format&fit=crop">Classic Literature (Paperback Book)</option>
                   <option value="https://images.unsplash.com/photo-1509248961158-e54f6934749c?q=80&w=300&auto=format&fit=crop">Mystery & Noir (Dark & Foggy)</option>
                   <option value="https://images.unsplash.com/photo-1518199266791-5375a83190b7?q=80&w=300&auto=format&fit=crop">Romantic Red (Rose petals & Love)</option>
                 </select>
+                <span style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 4, display: "block" }}>
+                  Picking a preset here replaces whatever URL you typed on the left.
+                </span>
               </div>
             </div>
 
@@ -706,7 +836,7 @@ export const AuthorUploadBook = ({ token, setActive, fetchBooks }) => {
                 onChange={e => setContent(e.target.value)}
                 required
               />
-              <span style={{ fontSize: 11, color: "#64748b", marginTop: 4, display: "block" }}>
+              <span style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 4, display: "block" }}>
                 Word Count: {content.split(/\s+/).filter(Boolean).length} words
               </span>
             </div>
@@ -726,7 +856,7 @@ export const AuthorUploadBook = ({ token, setActive, fetchBooks }) => {
                 className="btn-primary"
                 disabled={isSubmitting || !selectedPublisher || !createdBookId}
                 onClick={handleSubmitReview}
-                style={{ display: "flex", alignItems: "center", gap: 6, background: "linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)" }}
+                style={{ display: "flex", alignItems: "center", gap: 6, background: "linear-gradient(135deg, var(--accent-600) 0%, var(--accent-700) 100%)" }}
               >
                 <Send size={16} /> Submit to Publisher
               </button>
@@ -762,6 +892,24 @@ export const AuthorEditBook = ({ token, bookId, setActive, fetchBooks }) => {
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [coverImage, setCoverImage] = useState("");
+  const [chapters, setChapters] = useState([]);
+
+  const fetchManuscript = () => {
+    return axios.get(`${BASE_URL}/api/manuscripts/${bookId}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    }).then(({ data }) => {
+      if (data.success) {
+        setTitle(data.data.title || "");
+        setGenre(data.data.genre || "fiction");
+        setPrice(data.data.price ? String(data.data.price) : "0");
+        setContent(data.data.content || "");
+        setStatus(data.data.status || "draft");
+        setSelectedPublisher(data.data.publisher?._id || "");
+        setCoverImage(data.data.coverImage || "");
+        setChapters(data.data.chapters || []);
+      }
+    });
+  };
 
   useEffect(() => {
     if (!bookId) return;
@@ -777,19 +925,8 @@ export const AuthorEditBook = ({ token, bookId, setActive, fetchBooks }) => {
     }).catch(console.error);
 
     // Fetch book
-    axios.get(`${BASE_URL}/api/manuscripts/${bookId}`, { 
-      headers: { Authorization: `Bearer ${token}` } 
-    }).then(({ data }) => {
-      if (data.success) {
-        setTitle(data.data.title || "");
-        setGenre(data.data.genre || "fiction");
-        setPrice(data.data.price ? String(data.data.price) : "0");
-        setContent(data.data.content || "");
-        setStatus(data.data.status || "draft");
-        setSelectedPublisher(data.data.publisher?._id || "");
-        setCoverImage(data.data.coverImage || "");
-      }
-    }).catch(console.error).finally(() => setLoading(false));
+    fetchManuscript().catch(console.error).finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookId, token]);
 
   const handleUpdate = async (e) => {
@@ -855,8 +992,8 @@ export const AuthorEditBook = ({ token, bookId, setActive, fetchBooks }) => {
   if (loading) {
     return (
       <div className="dash-content animate-fade-in" style={{ textAlign: "center", padding: "100px 0" }}>
-        <RefreshCw className="animate-spin" size={48} style={{ color: "#7c3aed" }} />
-        <p style={{ marginTop: 12, color: "#94a3b8" }}>Loading manuscript details...</p>
+        <RefreshCw className="animate-spin" size={48} style={{ color: "var(--accent-600)" }} />
+        <p style={{ marginTop: 12, color: "var(--text-muted)" }}>Loading manuscript details...</p>
       </div>
     );
   }
@@ -866,7 +1003,7 @@ export const AuthorEditBook = ({ token, bookId, setActive, fetchBooks }) => {
       <div className="dash-welcome">
         <div>
           <h1>Edit Manuscript</h1>
-          <p>Currently Editing: <strong>{title}</strong> (Status: <span style={{ textTransform: "uppercase", color: "#7c3aed" }}>{status}</span>)</p>
+          <p>Currently Editing: <strong>{title}</strong> (Status: <span style={{ textTransform: "uppercase", color: "var(--accent-600)" }}>{status}</span>)</p>
         </div>
         <button onClick={() => setActive("mybooks")} className="btn-secondary" style={{ padding: "8px 16px" }}>
           <ArrowLeft size={16} /> Cancel Edits
@@ -891,24 +1028,25 @@ export const AuthorEditBook = ({ token, bookId, setActive, fetchBooks }) => {
               <div>
                 <label className="form-label">Genre</label>
                 <select className="input-field" value={genre} onChange={e => setGenre(e.target.value)} style={{ textTransform: "capitalize" }}>
-                  <option value="fiction">Fiction</option>
-                  <option value="non-fiction">Non-Fiction</option>
-                  <option value="science">Science</option>
-                  <option value="technology">Technology</option>
-                  <option value="poetry">Poetry</option>
-                  <option value="mystery">Mystery</option>
-                  <option value="romance">Romance</option>
+                  {BOOK_GENRES.map(g => <option key={g} value={g}>{g}</option>)}
                 </select>
+                <GenreSuggester text={content} token={token} onPick={setGenre} />
               </div>
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
               <div>
-                <label className="form-label">Select Publisher</label>
+                <label className="form-label">
+                  Select Publisher
+                  <HelpTip
+                    title="What happens next?"
+                    text="The publisher reviews your manuscript and may propose a publishing fee. You pay it from your wallet balance and the book goes live."
+                  />
+                </label>
                 <select className="input-field" value={selectedPublisher} onChange={e => setSelectedPublisher(e.target.value)}>
                   <option value="">-- Choose Publisher --</option>
                   {publishers.map(p => (
-                    <option key={p._id} value={p._id}>{p.name}</option>
+                    <option key={p._id} value={p._id}>{p.name}{p.publisherVerification?.isVerified ? " ✓ Verified" : " (not verified)"}</option>
                   ))}
                 </select>
               </div>
@@ -935,28 +1073,29 @@ export const AuthorEditBook = ({ token, bookId, setActive, fetchBooks }) => {
                   value={coverImage}
                   onChange={e => setCoverImage(e.target.value)}
                 />
+                <CoverPreview url={coverImage} />
               </div>
               <div>
                 <label className="form-label">Cover Theme Preset</label>
-                <select 
-                  className="input-field" 
+                <select
+                  className="input-field"
                   onChange={e => {
-                    if (e.target.value) {
-                      setCoverImage(e.target.value);
-                    } else {
-                      setCoverImage("");
-                    }
+                    if (e.target.value) setCoverImage(e.target.value);
+                    e.target.value = "";
                   }}
-                  value={coverImage}
+                  value=""
                 >
                   <option value="">-- Choose A Theme Style --</option>
-                  <option value={`https://picsum.photos/seed/${encodeURIComponent(title || "book")}/300/450`}>Automatic Title Art (Picsum)</option>
+                  <option value={`https://picsum.photos/seed/${encodeURIComponent(title || "book")}/300/450`}>Automatic Title Art (Picsum — random stock photo)</option>
                   <option value="https://images.unsplash.com/photo-1541701494587-cb58502866ab?q=80&w=300&auto=format&fit=crop">Modern Abstract (Vibrant Art)</option>
                   <option value="https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=300&auto=format&fit=crop">Digital Technology (Tech & Code)</option>
                   <option value="https://images.unsplash.com/photo-1544947950-fa07a98d237f?q=80&w=300&auto=format&fit=crop">Classic Literature (Paperback Book)</option>
                   <option value="https://images.unsplash.com/photo-1509248961158-e54f6934749c?q=80&w=300&auto=format&fit=crop">Mystery & Noir (Dark & Foggy)</option>
                   <option value="https://images.unsplash.com/photo-1518199266791-5375a83190b7?q=80&w=300&auto=format&fit=crop">Romantic Red (Rose petals & Love)</option>
                 </select>
+                <span style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 4, display: "block" }}>
+                  Picking a preset here replaces whatever URL you typed on the left.
+                </span>
               </div>
             </div>
 
@@ -969,7 +1108,7 @@ export const AuthorEditBook = ({ token, bookId, setActive, fetchBooks }) => {
                 onChange={e => setContent(e.target.value)}
                 required
               />
-              <div style={{ display: "flex", justify: "space-between", fontSize: 11, color: "#64748b", marginTop: 4 }}>
+              <div style={{ display: "flex", justify: "space-between", fontSize: 11, color: "var(--text-secondary)", marginTop: 4 }}>
                 <span>Word Count: {content.split(/\s+/).filter(Boolean).length} words</span>
               </div>
             </div>
@@ -983,13 +1122,13 @@ export const AuthorEditBook = ({ token, bookId, setActive, fetchBooks }) => {
                 Save Draft
               </button>
               
-              {status !== "published" && (
+              {["draft", "declined"].includes(status) && (
                 <button
                   type="button"
                   className="btn-primary"
                   disabled={isSaving || !selectedPublisher}
                   onClick={handleSubmitReview}
-                  style={{ background: "linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)" }}
+                  style={{ background: "linear-gradient(135deg, var(--accent-600) 0%, var(--accent-700) 100%)" }}
                 >
                   Send to Publisher
                 </button>
@@ -1000,15 +1139,25 @@ export const AuthorEditBook = ({ token, bookId, setActive, fetchBooks }) => {
 
         {/* AI Sidebar */}
         <div>
-          <InlineAIWriter 
-            content={content} 
-            setContent={setContent} 
-            bookId={bookId} 
-            token={token} 
+          <InlineAIWriter
+            content={content}
+            setContent={setContent}
+            bookId={bookId}
+            token={token}
             title={title}
             genre={genre}
           />
         </div>
+      </div>
+
+      {/* Chapter-by-chapter breakdown — the "Manuscript Content" box above is
+          a free-write scratchpad / AI-assist source; chapters here are what
+          readers actually navigate once published. Splitting into named
+          chapters before publishing also each get their own version-history
+          snapshot, unlike the single auto-generated "Introduction" chapter
+          that's created if none exist at publish time. */}
+      <div className="glass-panel" style={{ padding: 24, marginTop: 20 }}>
+        <ChapterManager bookId={bookId} chapters={chapters} onChapterUpdate={fetchManuscript} />
       </div>
     </div>
   );
@@ -1025,6 +1174,10 @@ export const AuthorBlockchain = ({ token, books, user, fetchBooks }) => {
   const [connecting, setConnecting] = useState(false);
   const [connectError, setConnectError] = useState("");
   const [metamaskDetected, setMetamaskDetected] = useState(true);
+  const [isOnChainRegistering, setIsOnChainRegistering] = useState(false);
+  const [onChainError, setOnChainError] = useState("");
+  const [isOnChainVerifying, setIsOnChainVerifying] = useState(false);
+  const [onChainVerifyResult, setOnChainVerifyResult] = useState(null);
 
   // Auto-detect MetaMask and restore existing connection on mount
   useEffect(() => {
@@ -1035,8 +1188,8 @@ export const AuthorBlockchain = ({ token, books, user, fetchBooks }) => {
         setWalletConnected(true);
       }
 
-      // Check if MetaMask extension is installed
-      if (!isMetaMaskInstalled()) {
+      // Check if MetaMask extension is installed (it injects itself a moment after load)
+      if (!(await waitForEthereum(2500))) {
         setMetamaskDetected(false);
         return;
       }
@@ -1088,7 +1241,8 @@ export const AuthorBlockchain = ({ token, books, user, fetchBooks }) => {
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (data.success) {
-        confetti({ particleCount: 150, spread: 80, colors: ["#7c3aed", "#10b981"] });
+        // canvas-confetti draws via <canvas> fillStyle, which can't resolve CSS custom properties — literal colors only
+        confetti({ particleCount: 150, spread: 80, colors: ["#4f46e5", "#16a34a"] });
         alert("Manuscript registered on Blockchain successfully!");
         await fetchBooks();
       }
@@ -1122,6 +1276,63 @@ export const AuthorBlockchain = ({ token, books, user, fetchBooks }) => {
     }
   };
 
+  // Real on-chain registration — writes to the deployed ManuscriptRegistry
+  // smart contract on Sepolia, signed by the author's own MetaMask wallet.
+  // Reuses the off-chain blockchainHash so both records reference the same
+  // fingerprint (requires "Register Copyright Signature" to have run first).
+  const handleOnChainRegister = async () => {
+    const book = books.find(b => (b._id || b.id) === selectedBookId);
+    if (!book) return alert("Select a manuscript first!");
+    if (!book.blockchainHash) return alert("Register the copyright signature first (left panel) — the on-chain step reuses that hash.");
+
+    setIsOnChainRegistering(true);
+    setOnChainError("");
+    try {
+      let result;
+      try {
+        result = await registerManuscriptOnChain(book._id || book.id, book.blockchainHash);
+      } catch (err) {
+        // Already registered on-chain (e.g. re-running after a content edit) — push a new version instead.
+        if (String(err?.reason || err?.message || "").includes("already registered")) {
+          result = await updateManuscriptOnChain(book._id || book.id, book.blockchainHash);
+        } else {
+          throw err;
+        }
+      }
+
+      await axios.post(
+        `${BASE_URL}/api/blockchain/onchain-register/${selectedBookId}`,
+        { txHash: result.txHash, network: "sepolia" },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      confetti({ particleCount: 150, spread: 80, colors: ["#4f46e5", "#16a34a"] });
+      await fetchBooks();
+    } catch (err) {
+      console.error("On-chain registration error:", err);
+      setOnChainError(err?.reason || err?.shortMessage || err?.message || "On-chain registration failed.");
+    } finally {
+      setIsOnChainRegistering(false);
+    }
+  };
+
+  const handleOnChainVerify = async () => {
+    const book = books.find(b => (b._id || b.id) === selectedBookId);
+    if (!book?.blockchainHash) return alert("This manuscript has no registered hash to verify against.");
+
+    setIsOnChainVerifying(true);
+    setOnChainVerifyResult(null);
+    try {
+      const isValid = await verifyManuscriptOnChain(book._id || book.id, book.blockchainHash);
+      setOnChainVerifyResult({ isValid });
+    } catch (err) {
+      console.error("On-chain verify error:", err);
+      setOnChainError(err?.reason || err?.shortMessage || err?.message || "On-chain verification failed.");
+    } finally {
+      setIsOnChainVerifying(false);
+    }
+  };
+
   const verifiedBooks = books.filter(b => b.blockchainHash);
 
   return (
@@ -1134,16 +1345,22 @@ export const AuthorBlockchain = ({ token, books, user, fetchBooks }) => {
       </div>
 
       <div className="blockchain-panel">
-        <div className="blockchain-status" style={{ border: "1px solid rgba(124, 58, 237, 0.2)" }}>
-          <div className="chain-icon"><Wallet size={32} color="#7c3aed" /></div>
+        <div className="blockchain-status" style={{ border: "1px solid rgba(79, 70, 229, 0.2)" }}>
+          <div className="chain-icon"><Wallet size={32} color="var(--accent-600)" /></div>
           <div style={{ flex: 1 }}>
-            <h3>Web3 Ledger Integration</h3>
+            <h3>
+              Web3 Ledger Integration
+              <HelpTip
+                title="What is this for?"
+                text="Lets you prove you wrote a manuscript by a certain date. A fingerprint of your text is saved — your story itself is not published. MetaMask is needed for the public-blockchain option."
+              />
+            </h3>
             {walletConnected ? (
-              <p className="chain-ok" style={{ color: "#34d399", display: "flex", alignItems: "center", gap: 6 }}>
+              <p className="chain-ok" style={{ color: "var(--success)", display: "flex", alignItems: "center", gap: 6 }}>
                 <CheckCircle size={14} /> Connected: {walletAddress.slice(0, 8)}...{walletAddress.slice(-6)}
               </p>
             ) : (
-              <p className="chain-warn" style={{ color: "#fb7185", display: "flex", alignItems: "center", gap: 6 }}>
+              <p className="chain-warn" style={{ color: "var(--danger)", display: "flex", alignItems: "center", gap: 6 }}>
                 <AlertCircle size={14} /> Connect Ethereum Wallet (MetaMask) to verify signatures.
               </p>
             )}
@@ -1177,7 +1394,7 @@ export const AuthorBlockchain = ({ token, books, user, fetchBooks }) => {
                 className="btn-primary"
                 style={{
                   background: connecting
-                    ? "#94a3b8"
+                    ? "var(--text-muted)"
                     : "linear-gradient(135deg, #f6851b 0%, #e2761b 100%)",
                   display: "flex",
                   alignItems: "center",
@@ -1204,12 +1421,12 @@ export const AuthorBlockchain = ({ token, books, user, fetchBooks }) => {
         {/* Connection Error Banner */}
         {connectError && (
           <div style={{
-            background: "rgba(239, 68, 68, 0.08)",
-            border: "1px solid rgba(239, 68, 68, 0.3)",
+            background: "rgba(220, 38, 38, 0.08)",
+            border: "1px solid rgba(220, 38, 38, 0.3)",
             borderRadius: 10,
             padding: "10px 14px",
             fontSize: 12,
-            color: "#ef4444",
+            color: "var(--danger)",
             display: "flex",
             alignItems: "flex-start",
             gap: 8,
@@ -1247,11 +1464,11 @@ export const AuthorBlockchain = ({ token, books, user, fetchBooks }) => {
 
               {selectedBookId && books.find(b => (b._id || b.id) === selectedBookId)?.blockchainHash ? (
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                  <div className="glass-panel" style={{ padding: 14, background: "rgba(16, 185, 129, 0.05)" }}>
-                    <p style={{ fontSize: 13, color: "#10b981", display: "flex", alignItems: "center", gap: 6, fontWeight: "bold" }}>
+                  <div className="glass-panel" style={{ padding: 14, background: "rgba(22, 163, 74, 0.05)" }}>
+                    <p style={{ fontSize: 13, color: "var(--success)", display: "flex", alignItems: "center", gap: 6, fontWeight: "bold" }}>
                       <CheckCircle size={14} /> Securely Locked on Ledger
                     </p>
-                    <p style={{ fontSize: 10, color: "#94a3b8", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 4 }}>
+                    <p style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 4 }}>
                       Hash: {books.find(b => (b._id || b.id) === selectedBookId).blockchainHash}
                     </p>
                   </div>
@@ -1267,11 +1484,11 @@ export const AuthorBlockchain = ({ token, books, user, fetchBooks }) => {
               )}
 
               {verifyResult && (
-                <div className="glass-panel" style={{ padding: 14, borderColor: verifyResult.isValid ? "#10b981" : "#ef4444", background: "rgba(0,0,0,0.15)" }}>
-                  <span style={{ color: verifyResult.isValid ? "#10b981" : "#ef4444", fontWeight: "bold", fontSize: 13 }}>
+                <div className="glass-panel" style={{ padding: 14, borderColor: verifyResult.isValid ? "var(--success)" : "var(--danger)", background: "color-mix(in srgb, var(--text-primary) 15%, transparent)" }}>
+                  <span style={{ color: verifyResult.isValid ? "var(--success)" : "var(--danger)", fontWeight: "bold", fontSize: 13 }}>
                     {verifyResult.isValid ? "✓ INTEGRITY VERIFIED" : "❌ HASH MISMATCH"}
                   </span>
-                  <p style={{ fontSize: 12, color: "#cbd5e1", marginTop: 6 }}>{verifyResult.message}</p>
+                  <p style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 6 }}>{verifyResult.message}</p>
                 </div>
               )}
             </div>
@@ -1287,23 +1504,156 @@ export const AuthorBlockchain = ({ token, books, user, fetchBooks }) => {
             ) : (
               <div className="activity-list">
                 {verifiedBooks.map(b => (
-                  <div key={b._id || b.id} className="chain-row" style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-                    <Lock size={14} color="#a78bfa" />
+                  <div key={b._id || b.id} className="chain-row" style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: "1px solid color-mix(in srgb, var(--text-primary) 4%, transparent)" }}>
+                    <Lock size={14} color="var(--accent-600)" />
                     <div style={{ flex: 1 }}>
                       <span className="chain-title" style={{ display: "block", fontSize: 13, fontWeight: "bold" }}>{b.title}</span>
-                      <span className="chain-hash" style={{ display: "block", fontSize: 9, color: "#64748b", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 180 }}>
+                      <span className="chain-hash" style={{ display: "block", fontSize: 9, color: "var(--text-secondary)", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 180 }}>
                         {b.blockchainHash.slice(0, 16)}...
                       </span>
                     </div>
-                    <span className="chain-date" style={{ fontSize: 10, color: "#64748b" }}>
+                    <span className="chain-date" style={{ fontSize: 10, color: "var(--text-secondary)" }}>
                       {new Date(b.createdAt).toLocaleDateString()}
                     </span>
-                    <CheckCircle size={14} color="#10b981" />
+                    <CheckCircle size={14} color="var(--success)" />
                   </div>
                 ))}
               </div>
             )}
           </div>
+        </div>
+
+        {/* Real on-chain anchor — actually writes to the deployed
+            ManuscriptRegistry contract on Sepolia via the author's own
+            MetaMask wallet, distinct from the off-chain hash-in-MongoDB
+            "ledger" above. */}
+        {(() => {
+          const book = books.find(b => (b._id || b.id) === selectedBookId);
+          const onChain = book?.onChainTxHash;
+
+          return (
+            <div className="dash-panel" style={{ marginTop: 20 }}>
+              <div className="panel-header">
+                <h3 style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <Shield size={16} color="var(--accent-600)" /> Real Blockchain Anchor (Sepolia Testnet)
+                  <HelpTip
+                    title="What is Sepolia?"
+                    text="A practice version of Ethereum — nothing on it has real money value. You need a little free test ETH for the fee (search for a Sepolia faucet)."
+                  />
+                </h3>
+              </div>
+
+              {!CONTRACT_ADDRESS ? (
+                <p className="empty-text">Smart contract not configured yet.</p>
+              ) : !book ? (
+                <p className="empty-text">Select a manuscript above.</p>
+              ) : onChain ? (
+                <div className="glass-panel" style={{ padding: 14, background: "rgba(22, 163, 74, 0.05)" }}>
+                  <p style={{ fontSize: 13, color: "var(--success)", display: "flex", alignItems: "center", gap: 6, fontWeight: "bold" }}>
+                    <CheckCircle size={14} /> Anchored on Sepolia — a real, public blockchain transaction
+                  </p>
+                  <a
+                    href={`https://sepolia.etherscan.io/tx/${onChain}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ fontSize: 11, color: "var(--accent-600)", fontFamily: "monospace", display: "block", marginTop: 6, wordBreak: "break-all" }}
+                  >
+                    {onChain} ↗ View on Etherscan
+                  </a>
+
+                  <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+                    <button onClick={handleOnChainVerify} disabled={isOnChainVerifying} className="btn-secondary" style={{ flex: 1, justifyContent: "center" }}>
+                      {isOnChainVerifying ? "Checking chain..." : "Verify on Sepolia"}
+                    </button>
+                    <button
+                      onClick={handleOnChainRegister}
+                      disabled={isOnChainRegistering || !book.blockchainHash}
+                      className="btn-secondary"
+                      style={{ flex: 1, justifyContent: "center" }}
+                      title="Push a new on-chain snapshot if you've edited and re-registered the off-chain hash since"
+                    >
+                      {isOnChainRegistering ? "Submitting..." : "Push New Version"}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  <p style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+                    Not yet anchored on Sepolia. This writes the same hash shown above to a real, permanent smart
+                    contract — you'll sign the transaction in MetaMask and pay a small amount of testnet gas.
+                  </p>
+                  <button
+                    onClick={handleOnChainRegister}
+                    disabled={isOnChainRegistering || !walletConnected || !book.blockchainHash}
+                    className="btn-primary"
+                    style={{ width: "100%", justifyContent: "center" }}
+                  >
+                    {isOnChainRegistering ? "Confirm in MetaMask..." : "Register on Sepolia (Real Blockchain)"}
+                  </button>
+                  {!book.blockchainHash && (
+                    <p style={{ fontSize: 11, color: "var(--text-muted)" }}>Register the copyright signature above first.</p>
+                  )}
+                </div>
+              )}
+
+              {onChainVerifyResult && (
+                <div className="glass-panel" style={{ padding: 14, marginTop: 12, borderColor: onChainVerifyResult.isValid ? "var(--success)" : "var(--danger)" }}>
+                  <span style={{ color: onChainVerifyResult.isValid ? "var(--success)" : "var(--danger)", fontWeight: "bold", fontSize: 13 }}>
+                    {onChainVerifyResult.isValid ? "✓ MATCHES ON-CHAIN RECORD" : "❌ DOES NOT MATCH ON-CHAIN RECORD"}
+                  </span>
+                </div>
+              )}
+
+              {onChainError && (
+                <div className="glass-panel" style={{ padding: 14, marginTop: 12, background: "var(--danger-bg)" }}>
+                  <span style={{ color: "var(--danger)", fontSize: 12 }}>{onChainError}</span>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* Version History — transparent, content-hashed edit timeline */}
+        <div className="dash-panel" style={{ marginTop: 20 }}>
+          <div className="panel-header">
+            <h3>
+              Version History
+              <HelpTip
+                title="What is this?"
+                text="A timeline of saved versions of your manuscript. Each has its own fingerprint, so you can see when the text changed."
+              />
+            </h3>
+          </div>
+          {(() => {
+            const selectedBook = books.find(b => (b._id || b.id) === selectedBookId);
+            const history = selectedBook?.versionHistory || [];
+            if (!selectedBook) {
+              return <p className="empty-text">Select a manuscript above to see its version history.</p>;
+            }
+            if (history.length === 0) {
+              return <p className="empty-text">No snapshots recorded yet for this manuscript.</p>;
+            }
+            return (
+              <div className="activity-list">
+                {[...history].reverse().map((v, idx) => (
+                  <div key={v._id || idx} className="chain-row" style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: "1px solid color-mix(in srgb, var(--text-primary) 4%, transparent)" }}>
+                    <Layers size={14} color="var(--accent-600)" />
+                    <div style={{ flex: 1 }}>
+                      <span className="chain-title" style={{ display: "block", fontSize: 13, fontWeight: "bold" }}>
+                        {v.note} · {v.wordCount} words
+                      </span>
+                      <span className="chain-hash" style={{ display: "block", fontSize: 9, color: "var(--text-secondary)", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 260 }}>
+                        {v.contentHash}
+                      </span>
+                    </div>
+                    <span className="chain-date" style={{ fontSize: 10, color: "var(--text-secondary)" }}>
+                      {new Date(v.snapshotAt).toLocaleString()}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
         </div>
       </div>
     </div>
@@ -1326,10 +1676,10 @@ export const AuthorAnalytics = ({ books, user }) => {
       </div>
 
       <div className="stats-row">
-        <StatCard icon={<Eye size={20} />} label="Total Reads" value={fmt(totalReads)} color="#0ea5e9" />
-        <StatCard icon={<TrendingUp size={20} />} label="Est. Earnings (USD)" value={`$${totalEarnings.toFixed(2)}`} color="#059669" />
-        <StatCard icon={<FileText size={20} />} label="Total Word Count" value={fmt(totalWords)} color="#7c3aed" />
-        <StatCard icon={<Star size={20} />} label="Books Scanned" value={books.filter(b => b.qualityScore).length} color="#f59e0b" />
+        <StatCard icon={<Eye size={20} />} label="Total Reads" value={fmt(totalReads)} color="var(--info)" />
+        <StatCard icon={<TrendingUp size={20} />} label="Est. Earnings (USD)" value={`$${totalEarnings.toFixed(2)}`} color="var(--success)" />
+        <StatCard icon={<FileText size={20} />} label="Total Word Count" value={fmt(totalWords)} color="var(--accent-600)" />
+        <StatCard icon={<Star size={20} />} label="Books Scanned" value={books.filter(b => b.qualityScore).length} color="var(--warning)" />
       </div>
 
       <div className="dash-grid" style={{ marginTop: 24 }}>
@@ -1351,7 +1701,7 @@ export const AuthorAnalytics = ({ books, user }) => {
                       <strong>{fmt(b.totalReads || 0)} reads</strong>
                     </div>
                     <div style={{ height: 8, background: "rgba(255,255,255,0.05)", borderRadius: 4, overflow: "hidden" }}>
-                      <div style={{ width: `${percent}%`, height: "100%", background: "linear-gradient(90deg, #7c3aed, #0ea5e9)", borderRadius: 4 }} />
+                      <div style={{ width: `${percent}%`, height: "100%", background: "linear-gradient(90deg, var(--accent-600), var(--info))", borderRadius: 4 }} />
                     </div>
                   </div>
                 );
@@ -1364,14 +1714,14 @@ export const AuthorAnalytics = ({ books, user }) => {
           <div className="panel-header">
             <h3>Monthly Reader Trends</h3>
           </div>
-          <div style={{ display: "flex", alignItems: "flex-end", height: 180, gap: 16, paddingBottom: 10, borderBottom: "1px solid rgba(0,0,0,0.1)" }}>
+          <div style={{ display: "flex", alignItems: "flex-end", height: 180, gap: 16, paddingBottom: 10, borderBottom: "1px solid color-mix(in srgb, var(--text-primary) 10%, transparent)" }}>
             {[
               { m: "Dec", h: 25 }, { m: "Jan", h: 40 }, { m: "Feb", h: 55 }, 
               { m: "Mar", h: 45 }, { m: "Apr", h: 70 }, { m: "May", h: 90 }
             ].map((trend, idx) => (
               <div key={idx} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-                <div style={{ width: "100%", height: `${trend.h}%`, background: idx === 5 ? "#7c3aed" : "rgba(124, 58, 237, 0.4)", borderRadius: "4px 4px 0 0" }} />
-                <span style={{ fontSize: 10, color: "#64748b" }}>{trend.m}</span>
+                <div style={{ width: "100%", height: `${trend.h}%`, background: idx === 5 ? "var(--accent-600)" : "rgba(79, 70, 229, 0.4)", borderRadius: "4px 4px 0 0" }} />
+                <span style={{ fontSize: 10, color: "var(--text-secondary)" }}>{trend.m}</span>
               </div>
             ))}
           </div>
@@ -1458,14 +1808,14 @@ export const AuthorAIAssistant = ({ token }) => {
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
           {/* Output card */}
           <div className="glass-panel" style={{ padding: 24, flex: 1, minHeight: 280, display: "flex", flexDirection: "column" }}>
-            <h3 style={{ display: "flex", alignItems: "center", gap: 6, color: "#7c3aed" }}><Sparkles size={16} /> AI Output Suggestion</h3>
+            <h3 style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--accent-600)" }}><Sparkles size={16} /> AI Output Suggestion</h3>
             {loading ? (
               <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <RefreshCw className="spin" size={32} style={{ color: "#7c3aed" }} />
+                <RefreshCw className="spin" size={32} style={{ color: "var(--accent-600)" }} />
               </div>
             ) : result ? (
               <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 12, marginTop: 12 }}>
-                <div style={{ flex: 1, padding: 16, background: "rgba(124, 58, 237, 0.03)", border: "1px solid rgba(124, 58, 237, 0.1)", borderRadius: 10, fontSize: 13, lineHeight: 1.6, overflowY: "auto" }}>
+                <div style={{ flex: 1, padding: 16, background: "rgba(79, 70, 229, 0.03)", border: "1px solid rgba(79, 70, 229, 0.1)", borderRadius: 10, fontSize: 13, lineHeight: 1.6, overflowY: "auto" }}>
                   {result.replace(/^\[.*\]:\n/, "")}
                 </div>
                 <button
@@ -1480,7 +1830,7 @@ export const AuthorAIAssistant = ({ token }) => {
                 </button>
               </div>
             ) : (
-              <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "#94a3b8", fontSize: 13, textAlign: "center", padding: 20 }}>
+              <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", fontSize: 13, textAlign: "center", padding: 20 }}>
                 Write draft content and click generate to observe AI suggestions here.
               </div>
             )}
@@ -1517,7 +1867,7 @@ export const AuthorAIAssistant = ({ token }) => {
 };
 
 // ─── AUTHOR SETTINGS ─────────────────────────────────────────────────────────
-export const AuthorSettings = ({ user, token }) => {
+export const AuthorSettings = ({ user }) => {
   const { updateProfile } = useAuth();
   const [name, setName] = useState(user?.name || "");
   const [bio, setBio] = useState(user?.bio || "");
@@ -1603,9 +1953,9 @@ export const AuthorSettings = ({ user, token }) => {
                       fontSize: 12,
                       borderRadius: 20,
                       border: "1.5px solid",
-                      borderColor: active ? "#7c3aed" : "#e2e8f0",
-                      background: active ? "rgba(124, 58, 237, 0.08)" : "#fff",
-                      color: active ? "#7c3aed" : "#64748b",
+                      borderColor: active ? "var(--accent-600)" : "var(--border-medium)",
+                      background: active ? "rgba(79, 70, 229, 0.08)" : "var(--bg-primary)",
+                      color: active ? "var(--accent-600)" : "var(--text-secondary)",
                       fontWeight: 600,
                       cursor: "pointer",
                       textTransform: "capitalize",
@@ -1619,12 +1969,17 @@ export const AuthorSettings = ({ user, token }) => {
             </div>
           </div>
 
-          <div style={{ borderTop: "1px solid #f1f5f9", paddingTop: 20, display: "flex", justifyContent: "flex-end" }}>
+          <div style={{ borderTop: "1px solid var(--gray-100)", paddingTop: 20, display: "flex", justifyContent: "flex-end" }}>
             <button type="submit" disabled={loading} className="btn-primary">
               {loading ? "Saving settings..." : "Save Changes"}
             </button>
           </div>
         </form>
+      </div>
+
+      <div className="glass-panel" style={{ padding: 32, maxWidth: 640 }}>
+        <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>Appearance</h3>
+        <ThemeToggle />
       </div>
     </div>
   );

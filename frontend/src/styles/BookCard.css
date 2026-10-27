@@ -14,9 +14,31 @@
 }
 
 .book-card-cover {
+  position: relative;
   aspect-ratio: 2/3;
   overflow: hidden;
   background: var(--bg-tertiary);
+}
+
+.book-card-price-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #fff;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+}
+
+.book-card-price-badge.free {
+  background: color-mix(in srgb, var(--success) 85%, transparent);
+}
+
+.book-card-price-badge.paid {
+  background: color-mix(in srgb, var(--accent-600) 85%, transparent);
 }
 
 .book-card-cover img {
@@ -67,8 +89,8 @@
 }
 
 .book-card-rating .star-filled {
-  fill: #fbbf24;
-  color: #fbbf24;
+  fill: var(--warning);
+  color: var(--warning);
 }
 
 .book-card-rating span {

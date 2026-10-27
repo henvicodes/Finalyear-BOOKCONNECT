@@ -28,6 +28,12 @@ const messageSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // In the AI-assistant chat both the user's question and the assistant's answer
+    // are stored under the user's id; this says which one the assistant wrote.
+    // (Left unset on messages saved before this field existed.)
+    fromAi: {
+      type: Boolean,
+    },
     read: {
       type: Boolean,
       default: false,

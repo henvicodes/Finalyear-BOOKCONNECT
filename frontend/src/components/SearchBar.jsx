@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
+import axios from "axios";
+import { APP_HEADERS } from "../utils/session";
 import { Search, Filter, ChevronDown, X, Sparkles, Loader, BookOpen, Users } from "lucide-react";
+import { authorOf } from "../utils/bookDisplay";
 
 // ── Search Bar ────────────────────────────────────────────────────────────────
 const GENRES  = ["Fiction","Non-Fiction","Science","Technology","History","Philosophy","Poetry","Romance"];
@@ -42,10 +45,11 @@ const SearchBar = () => {
         if (filters.genre)    params.append("genre",    filters.genre);
         if (filters.language) params.append("language", filters.language);
         if (filters.type)     params.append("isPaid",   filters.type==="Paid"?"true":"false");
-        const token = JSON.parse(localStorage.getItem("user")||"{}").token;
+        // Auth is the httpOnly session cookie, sent via credentials: "include".
+        const opts = { credentials:"include", headers: APP_HEADERS };
         const [booksRes, usersRes] = await Promise.all([
-          fetch(`/api/books?${params}`,{ headers:{ Authorization:`Bearer ${token}` }}).then(r=>r.json()).catch(()=>({data:[]})),
-          fetch(`/api/auth/search?q=${query}`,{ headers:{ Authorization:`Bearer ${token}` }}).then(r=>r.json()).catch(()=>({data:[]})),
+          fetch(`/api/books?${params}`, opts).then(r=>r.json()).catch(()=>({data:[]})),
+          fetch(`/api/auth/search?q=${encodeURIComponent(query)}`, opts).then(r=>r.json()).catch(()=>({data:[]})),
         ]);
         setResults(prev => ({
           ...prev,
@@ -57,19 +61,8 @@ const SearchBar = () => {
 
       setAiLoading(true);
       try {
-        const res = await fetch("https://api.anthropic.com/v1/messages",{
-          method:"POST",
-          headers:{"Content-Type":"application/json"},
-          body: JSON.stringify({
-            model:"claude-sonnet-4-20250514", max_tokens:600,
-            messages:[{ role:"user", content:`You are a book search assistant for BookConnect.
-User searched: "${query}". Filters: ${JSON.stringify(filters)}.
-Reply ONLY valid JSON:
-{"intent":"one sentence","suggestions":["s1","s2","s3"],"recommendations":[{"title":"T","author":"A","genre":"G","reason":"R"},{"title":"T","author":"A","genre":"G","reason":"R"},{"title":"T","author":"A","genre":"G","reason":"R"}]}`}]
-          })
-        });
-        const data   = await res.json();
-        const parsed = JSON.parse(data.content?.[0]?.text.replace(/```json|```/g,"").trim()||"{}");
+        const { data } = await axios.post("/api/ai/search-assist", { query, filters });
+        const parsed = data.available ? data : {};
         setResults(prev => ({ ...prev, aiSuggestions:parsed.suggestions||[], intent:parsed.intent||"" }));
         setAiRecs(parsed.recommendations||[]);
       } catch(e) { console.error(e); }
@@ -172,7 +165,7 @@ Reply ONLY valid JSON:
                   <div className="sb-bookico"><BookOpen size={13}/></div>
                   <div className="sb-info">
                     <div className="sb-ititle">{b.title}</div>
-                    <div className="sb-isub">by {b.author?.name||"Unknown"}{b.genre?` · ${b.genre}`:""}{b.isPaid?" · Paid":" · Free"}</div>
+                    <div className="sb-isub">by {authorOf(b)||"Unknown"}{b.genre?` · ${b.genre}`:""}{b.isPaid?" · Paid":" · Free"}</div>
                   </div>
                   {b.averageRating>0 && <span className="sb-rating">⭐ {b.averageRating?.toFixed(1)}</span>}
                 </div>

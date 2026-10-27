@@ -2,9 +2,9 @@
 
 .edit-profile-page {
   min-height: 100vh;
-  background: #f8f7ff;
+  background: var(--accent-50);
   font-family: 'Sora', sans-serif;
-  color: #1a1a2e;
+  color: var(--text-primary);
   padding: 36px 20px 60px;
 }
 
@@ -17,9 +17,9 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: #ffffff;
-  border: 1px solid #ede9fe;
-  color: #64748b;
+  background: var(--bg-primary);
+  border: 1px solid var(--accent-100);
+  color: var(--text-secondary);
   font-size: 13px;
   font-weight: 600;
   font-family: 'Sora', sans-serif;
@@ -31,31 +31,31 @@
 }
 
 .btn-back:hover {
-  color: #7c3aed;
-  border-color: #c4b5fd;
-  background: #faf8ff;
+  color: var(--accent-600);
+  border-color: var(--accent-300);
+  background: var(--accent-50);
 }
 
 .edit-profile-card {
-  background: #ffffff;
-  border: 1px solid #ede9fe;
+  background: var(--bg-primary);
+  border: 1px solid var(--accent-100);
   border-radius: 16px;
   padding: 36px;
-  box-shadow: 0 4px 24px rgba(124, 58, 237, 0.05);
+  box-shadow: 0 4px 24px rgba(79, 70, 229, 0.05);
 }
 
 .edit-profile-title {
   font-size: 22px;
   font-weight: 700;
-  color: #1a1a2e;
+  color: var(--text-primary);
   letter-spacing: -0.5px;
   margin: 0 0 24px;
 }
 
 .edit-error {
-  background: #fee2e2;
-  border-left: 4px solid #ef4444;
-  color: #b91c1c;
+  background: var(--danger-bg);
+  border-left: 4px solid var(--danger);
+  color: var(--danger);
   font-size: 13px;
   font-weight: 500;
   padding: 12px 16px;
@@ -64,9 +64,9 @@
 }
 
 .edit-success {
-  background: #dcfce7;
-  border-left: 4px solid #10b981;
-  color: #15803d;
+  background: var(--success-bg);
+  border-left: 4px solid var(--success);
+  color: var(--success);
   font-size: 13px;
   font-weight: 600;
   padding: 12px 16px;
@@ -92,22 +92,22 @@
   gap: 6px;
   font-size: 13px;
   font-weight: 600;
-  color: #4b5563;
+  color: var(--gray-600);
 }
 
 .edit-label svg {
-  color: #7c3aed;
+  color: var(--accent-600);
 }
 
 .edit-input,
 .edit-textarea {
   width: 100%;
   padding: 11px 15px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--border-medium);
   border-radius: 10px;
   font-size: 14px;
-  color: #1e293b;
-  background: #ffffff;
+  color: var(--text-primary);
+  background: var(--bg-primary);
   transition: all 0.2s ease;
   outline: none;
   font-family: 'Sora', sans-serif;
@@ -115,15 +115,15 @@
 
 .edit-input:focus,
 .edit-textarea:focus {
-  border-color: #7c3aed;
-  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.12);
+  border-color: var(--accent-600);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12);
 }
 
 .edit-input--readonly {
-  background: #f8fafc;
-  color: #94a3b8;
+  background: var(--gray-50);
+  color: var(--text-muted);
   cursor: not-allowed;
-  border-color: #e2e8f0;
+  border-color: var(--border-medium);
 }
 
 .edit-textarea {
@@ -134,7 +134,7 @@
 
 .edit-hint {
   font-size: 11px;
-  color: #94a3b8;
+  color: var(--text-muted);
   text-align: right;
 }
 
@@ -146,12 +146,12 @@
 
 .interest-toggle {
   padding: 6px 14px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--border-medium);
   border-radius: 20px;
   font-size: 12px;
   font-weight: 600;
-  background: #ffffff;
-  color: #64748b;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
   cursor: pointer;
   text-transform: capitalize;
   transition: all 0.2s ease;
@@ -159,15 +159,15 @@
 }
 
 .interest-toggle:hover {
-  border-color: #7c3aed;
-  color: #7c3aed;
-  background: #f8f7ff;
+  border-color: var(--accent-600);
+  color: var(--accent-600);
+  background: var(--accent-50);
 }
 
 .interest-toggle.active {
-  background: #7c3aed;
+  background: var(--accent-600);
   color: white;
-  border-color: #7c3aed;
+  border-color: var(--accent-600);
 }
 
 .edit-form-actions {
@@ -175,15 +175,15 @@
   gap: 12px;
   justify-content: flex-end;
   padding-top: 12px;
-  border-top: 1px solid #f1f5f9;
+  border-top: 1px solid var(--gray-100);
   margin-top: 12px;
 }
 
 .btn-cancel-edit {
   padding: 10px 18px;
-  border: 1.5px solid #e2e8f0;
-  background: #ffffff;
-  color: #64748b;
+  border: 1.5px solid var(--border-medium);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
   border-radius: 10px;
   font-size: 13px;
   font-weight: 600;
@@ -193,8 +193,8 @@
 }
 
 .btn-cancel-edit:hover {
-  background: #f8fafc;
-  color: #1e293b;
+  background: var(--gray-50);
+  color: var(--text-primary);
 }
 
 .btn-save {
@@ -202,7 +202,7 @@
   align-items: center;
   gap: 6px;
   padding: 10px 20px;
-  background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+  background: linear-gradient(135deg, var(--accent-600) 0%, var(--accent-700) 100%);
   color: white;
   border: none;
   border-radius: 10px;
@@ -211,12 +211,12 @@
   cursor: pointer;
   transition: all 0.2s ease;
   font-family: 'Sora', sans-serif;
-  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.2);
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.2);
 }
 
 .btn-save:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(124, 58, 237, 0.3);
+  box-shadow: 0 6px 16px rgba(79, 70, 229, 0.3);
   opacity: 0.95;
 }
 

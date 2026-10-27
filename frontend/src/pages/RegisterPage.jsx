@@ -27,7 +27,7 @@ const RegisterPage = () => {
   const [registrationEmail, setRegistrationEmail] = useState("");
   const [devOtp, setDevOtp] = useState(null);
 
-  const { register, login } = useAuth();
+  const { login } = useAuth();
   const navigate = useNavigate();
 
   const handleChange = (e) => {
@@ -117,9 +117,7 @@ const RegisterPage = () => {
         otp,
       });
       if (response.data.success) {
-        const { token, ...userInfo } = response.data.data;
-        localStorage.setItem("user", JSON.stringify({ ...userInfo, token }));
-
+        // The server set the session cookie; login() below stores the profile.
         await login(registrationEmail, formData.password);
         navigate("/dashboard");
       }

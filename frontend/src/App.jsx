@@ -4,13 +4,17 @@ import {
   Routes,
   Route,
   Navigate,
-  useLocation
+  useLocation,
 } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
+import { ThemeProvider } from "./context/ThemeContext";
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
 import PrivateRoute from "./components/PrivateRoute";
 import ErrorBoundary from "./components/ErrorBoundary";
+
+import PublicRoute from "./components/PublicRoute";
+import AiAssistantWidget from "./components/AiAssistantWidget";
 
 // Pages
 import HomePage from "./pages/HomePage";
@@ -25,6 +29,10 @@ import EditBookPage from "./pages/EditBookPage";
 
 import ProfilePage from "./pages/Profile/ProfilePage.jsx";
 import EditProfilePage from "./pages/Profile/EditProfilePage.jsx";
+import AboutPage from "./pages/AboutPage.jsx";
+
+import PersonalizedRecommendationsPage from "./pages/Recommendations/PersonalizedRecommendationsPage.jsx";
+import ReaderWriterMatchingPage from "./pages/Recommendations/ReaderWriterMatchingPage.jsx";
 
 // Sub-component wrapping logic to enable valid useLocation usage inside the Router context
 const AppContent = () => {
@@ -44,8 +52,10 @@ const AppContent = () => {
         <Routes>
           {/* Public */}
           <Route path="/" element={<HomePage />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
+          <Route element={<PublicRoute />}>
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
+          </Route>
 
           {/* Protected */}
           <Route
@@ -69,6 +79,22 @@ const AppContent = () => {
             element={
               <PrivateRoute>
                 <EditProfilePage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/recommendations"
+            element={
+              <PrivateRoute>
+                <PersonalizedRecommendationsPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/matching"
+            element={
+              <PrivateRoute>
+                <ReaderWriterMatchingPage />
               </PrivateRoute>
             }
           />
@@ -103,6 +129,8 @@ const AppContent = () => {
         </Routes>
       </main>
       {showNavAndFooter && <Footer />}
+      {/* the assistant is available on every dashboard: reader, author, publisher and admin */}
+      {!showNavAndFooter && <AiAssistantWidget />}
     </div>
   );
 };
@@ -110,11 +138,13 @@ const AppContent = () => {
 const App = () => {
   return (
     <ErrorBoundary>
-      <AuthProvider>
-        <Router>
-          <AppContent />
-        </Router>
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <Router>
+            <AppContent />
+          </Router>
+        </AuthProvider>
+      </ThemeProvider>
     </ErrorBoundary>
   );
 };

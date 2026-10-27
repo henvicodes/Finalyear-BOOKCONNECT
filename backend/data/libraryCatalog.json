@@ -1,0 +1,415 @@
+[
+  {
+    "id": 1342,
+    "match": "pride and prejudice",
+    "genre": "romance",
+    "year": 1813,
+    "price": 0,
+    "tags": [
+      "classic",
+      "regency",
+      "family"
+    ],
+    "description": "Elizabeth Bennet and the proud Mr. Darcy misjudge each other in a witty portrait of class, marriage and first impressions in Regency England."
+  },
+  {
+    "id": 84,
+    "match": "frankenstein",
+    "genre": "horror",
+    "year": 1818,
+    "price": 0,
+    "tags": [
+      "classic",
+      "gothic",
+      "science"
+    ],
+    "description": "A young scientist creates life and then abandons it, with tragic results. One of the first science-fiction novels, and still one of the most chilling."
+  },
+  {
+    "id": 1661,
+    "match": "adventures of sherlock holmes",
+    "genre": "mystery",
+    "year": 1892,
+    "price": 3,
+    "tags": [
+      "classic",
+      "detective",
+      "short stories"
+    ],
+    "description": "Twelve cases of the world's most famous detective, told by Dr. Watson: disguises, blackmail, a speckled band and the Red-Headed League."
+  },
+  {
+    "id": 11,
+    "match": "alice's adventures in wonderland",
+    "genre": "children",
+    "year": 1865,
+    "price": 0,
+    "tags": [
+      "classic",
+      "fantasy",
+      "nonsense"
+    ],
+    "description": "Alice follows a white rabbit down a hole into a world of riddles, croquet with flamingos and a very unreasonable Queen."
+  },
+  {
+    "id": 2701,
+    "match": "moby",
+    "genre": "fiction",
+    "year": 1851,
+    "price": 4,
+    "tags": [
+      "classic",
+      "sea",
+      "obsession"
+    ],
+    "description": "Captain Ahab's obsessive hunt for the white whale, narrated by the sailor Ishmael, is part adventure, part meditation on fate and the sea."
+  },
+  {
+    "id": 345,
+    "match": "dracula",
+    "genre": "horror",
+    "year": 1897,
+    "price": 4,
+    "tags": [
+      "classic",
+      "gothic",
+      "vampire"
+    ],
+    "description": "Told through letters, diaries and news clippings, Count Dracula's arrival in England sets a band of friends against an ancient evil."
+  },
+  {
+    "id": 174,
+    "match": "picture of dorian gray",
+    "genre": "fiction",
+    "year": 1890,
+    "price": 0,
+    "tags": [
+      "classic",
+      "gothic",
+      "morality"
+    ],
+    "description": "A beautiful young man stays unchanged while his portrait ages and records every sin. Wilde's only novel is a dark tale of vanity and corruption."
+  },
+  {
+    "id": 98,
+    "match": "tale of two cities",
+    "genre": "history",
+    "year": 1859,
+    "price": 0,
+    "tags": [
+      "classic",
+      "french revolution"
+    ],
+    "description": "London and Paris on the eve of the French Revolution, and a story of sacrifice: 'It was the best of times, it was the worst of times.'"
+  },
+  {
+    "id": 1260,
+    "match": "jane eyre",
+    "genre": "romance",
+    "year": 1847,
+    "price": 3,
+    "tags": [
+      "classic",
+      "gothic",
+      "orphan"
+    ],
+    "description": "An orphaned governess with a fierce sense of independence falls for her brooding employer, and discovers the secret hidden at Thornfield Hall."
+  },
+  {
+    "id": 768,
+    "match": "wuthering heights",
+    "genre": "romance",
+    "year": 1847,
+    "price": 0,
+    "tags": [
+      "classic",
+      "gothic",
+      "revenge"
+    ],
+    "description": "On the Yorkshire moors, Heathcliff and Catherine's wild, destructive love reaches across two generations."
+  },
+  {
+    "id": 2554,
+    "match": "crime and punishment",
+    "genre": "thriller",
+    "year": 1866,
+    "price": 5,
+    "tags": [
+      "classic",
+      "russian",
+      "psychological"
+    ],
+    "description": "A poor student murders a pawnbroker and is hunted by his own conscience in Dostoevsky's psychological masterpiece."
+  },
+  {
+    "id": 76,
+    "match": "huckleberry finn",
+    "genre": "fiction",
+    "year": 1884,
+    "price": 0,
+    "tags": [
+      "classic",
+      "american",
+      "adventure"
+    ],
+    "description": "Huck and the runaway Jim drift down the Mississippi on a raft, in a sharp, funny look at friendship and freedom in the American South."
+  },
+  {
+    "id": 74,
+    "match": "tom sawyer",
+    "genre": "children",
+    "year": 1876,
+    "price": 0,
+    "tags": [
+      "classic",
+      "american",
+      "adventure"
+    ],
+    "description": "Mischief, buried treasure and a murder witnessed in a graveyard fill a boyhood summer in a small Mississippi town."
+  },
+  {
+    "id": 35,
+    "match": "time machine",
+    "genre": "science",
+    "year": 1895,
+    "price": 0,
+    "tags": [
+      "classic",
+      "science fiction",
+      "time travel"
+    ],
+    "description": "A Victorian inventor travels to the year 802,701 and finds humanity split into two very different species."
+  },
+  {
+    "id": 36,
+    "match": "war of the worlds",
+    "genre": "science",
+    "year": 1898,
+    "price": 2,
+    "tags": [
+      "classic",
+      "science fiction",
+      "invasion"
+    ],
+    "description": "Martian war machines land in Surrey and begin to destroy everything in their path. The founding story of alien invasion."
+  },
+  {
+    "id": 164,
+    "match": "twenty thousand leagues",
+    "genre": "science",
+    "year": 1870,
+    "price": 0,
+    "tags": [
+      "classic",
+      "adventure",
+      "sea"
+    ],
+    "description": "Captain Nemo and his submarine Nautilus take three captives on a tour of the ocean's wonders and terrors."
+  },
+  {
+    "id": 103,
+    "match": "around the world in eighty days",
+    "genre": "fiction",
+    "year": 1872,
+    "price": 0,
+    "tags": [
+      "classic",
+      "adventure",
+      "travel"
+    ],
+    "description": "Phileas Fogg bets his fortune that he can circle the globe in eighty days, and a detective is on his trail."
+  },
+  {
+    "id": 120,
+    "match": "treasure island",
+    "genre": "children",
+    "year": 1883,
+    "price": 0,
+    "tags": [
+      "classic",
+      "pirates",
+      "adventure"
+    ],
+    "description": "Young Jim Hawkins, a map, and Long John Silver: the original pirate adventure."
+  },
+  {
+    "id": 43,
+    "match": "jekyll",
+    "genre": "horror",
+    "year": 1886,
+    "price": 0,
+    "tags": [
+      "classic",
+      "gothic",
+      "short"
+    ],
+    "description": "A respectable doctor's experiment releases the cruel Mr. Hyde. A short, tense study of the double life within us all."
+  },
+  {
+    "id": 1952,
+    "match": "yellow wallpaper",
+    "genre": "horror",
+    "year": 1892,
+    "price": 0,
+    "tags": [
+      "classic",
+      "short story",
+      "psychological"
+    ],
+    "description": "Confined to a room for her 'rest cure', a woman becomes fixated on the pattern of the wallpaper. A landmark of feminist literature."
+  },
+  {
+    "id": 1232,
+    "match": "prince",
+    "genre": "non-fiction",
+    "year": 1532,
+    "price": 2,
+    "tags": [
+      "classic",
+      "politics",
+      "philosophy"
+    ],
+    "description": "Machiavelli's famous guide to winning and keeping power, practical, cold and still argued over five centuries later."
+  },
+  {
+    "id": 2680,
+    "match": "meditations",
+    "genre": "non-fiction",
+    "year": 180,
+    "price": 0,
+    "tags": [
+      "classic",
+      "stoicism",
+      "philosophy"
+    ],
+    "description": "The private notes of the Roman emperor Marcus Aurelius on duty, discipline and staying calm."
+  },
+  {
+    "id": 46,
+    "match": "christmas carol",
+    "genre": "fiction",
+    "year": 1843,
+    "price": 0,
+    "tags": [
+      "classic",
+      "ghost story",
+      "short"
+    ],
+    "description": "Three ghosts visit the miser Ebenezer Scrooge on Christmas Eve and show him the cost of his choices."
+  },
+  {
+    "id": 1080,
+    "match": "modest proposal",
+    "genre": "non-fiction",
+    "year": 1729,
+    "price": 0,
+    "tags": [
+      "classic",
+      "satire",
+      "essay"
+    ],
+    "description": "Swift's savage satire proposes a shocking solution to Irish poverty. One of the most famous essays in English."
+  },
+  {
+    "id": 829,
+    "match": "gulliver",
+    "genre": "fiction",
+    "year": 1726,
+    "price": 0,
+    "tags": [
+      "classic",
+      "satire",
+      "travel"
+    ],
+    "description": "Lemuel Gulliver visits lands of tiny people, giants and talking horses in Swift's biting satire of human folly."
+  },
+  {
+    "id": 5200,
+    "match": "metamorphosis",
+    "genre": "fiction",
+    "year": 1915,
+    "price": 0,
+    "tags": [
+      "classic",
+      "short",
+      "absurd"
+    ],
+    "description": "Gregor Samsa wakes up as an enormous insect. Kafka's strange, short story of alienation and family."
+  },
+  {
+    "id": 16,
+    "match": "peter pan",
+    "genre": "children",
+    "year": 1911,
+    "price": 0,
+    "tags": [
+      "classic",
+      "fantasy"
+    ],
+    "description": "The boy who wouldn't grow up takes Wendy and her brothers to Neverland, to Captain Hook's ship and back."
+  },
+  {
+    "id": 55,
+    "match": "wonderful wizard of oz",
+    "genre": "children",
+    "year": 1900,
+    "price": 0,
+    "tags": [
+      "classic",
+      "fantasy"
+    ],
+    "description": "A Kansas farm girl is swept to the Land of Oz and sets off down the yellow brick road to find the Wizard."
+  },
+  {
+    "id": 514,
+    "match": "little women",
+    "genre": "fiction",
+    "year": 1868,
+    "price": 3,
+    "tags": [
+      "classic",
+      "family",
+      "coming of age"
+    ],
+    "description": "The four March sisters grow up in Civil War New England: Meg, Jo, Beth and Amy."
+  },
+  {
+    "id": 215,
+    "match": "call of the wild",
+    "genre": "fiction",
+    "year": 1903,
+    "price": 0,
+    "tags": [
+      "classic",
+      "adventure",
+      "dogs"
+    ],
+    "description": "Buck, a pampered dog, is stolen and sent to the Yukon gold rush, where he must find the wolf inside."
+  },
+  {
+    "id": 1727,
+    "match": "odyssey",
+    "genre": "poetry",
+    "year": -700,
+    "price": 0,
+    "tags": [
+      "classic",
+      "epic",
+      "greek"
+    ],
+    "description": "Odysseus's ten-year journey home from Troy, in the epic poem that started adventure storytelling (Samuel Butler's prose translation)."
+  },
+  {
+    "id": 1513,
+    "match": "romeo and juliet",
+    "genre": "drama",
+    "year": 1597,
+    "price": 0,
+    "tags": [
+      "classic",
+      "play",
+      "tragedy"
+    ],
+    "description": "Two young lovers from feuding families in Verona. Shakespeare's most famous tragedy."
+  }
+]

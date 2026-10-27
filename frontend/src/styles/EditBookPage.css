@@ -147,7 +147,7 @@
 }
 
 .tag-remove:hover {
-  color: #dc2626;
+  color: var(--danger);
 }
 
 .form-actions {
@@ -180,22 +180,22 @@
 }
 
 .btn-publish {
-  background: #22c55e;
+  background: var(--success);
   color: white;
 }
 
 .btn-publish:hover:not(:disabled) {
-  background: #16a34a;
+  background: var(--success);
   transform: translateY(-1px);
 }
 
 .btn-delete-book {
-  background: #dc2626;
+  background: var(--danger);
   color: white;
 }
 
 .btn-delete-book:hover:not(:disabled) {
-  background: #b91c1c;
+  background: var(--danger);
   transform: translateY(-1px);
 }
 
@@ -211,16 +211,16 @@
   background: rgba(220, 38, 38, 0.1);
   border: 1px solid rgba(220, 38, 38, 0.3);
   border-radius: 8px;
-  color: #dc2626;
+  color: var(--danger);
   margin-bottom: 1rem;
 }
 
 .success-message {
   padding: 1rem;
-  background: rgba(34, 197, 94, 0.1);
-  border: 1px solid rgba(34, 197, 94, 0.3);
+  background: rgba(22, 163, 74, 0.1);
+  border: 1px solid rgba(22, 163, 74, 0.3);
   border-radius: 8px;
-  color: #22c55e;
+  color: var(--success);
   margin-bottom: 1rem;
 }
 

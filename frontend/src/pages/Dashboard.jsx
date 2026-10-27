@@ -8,11 +8,14 @@ import {
   MessageCircle, Award, Zap, Globe, PenTool, Search,
   BarChart2, Clock, CheckCircle, AlertCircle, Plus,
   BookMarked, Layers, DollarSign, UserCheck, FileText,
-  Hash, Lock, Sparkles, ArrowUpRight, Menu, X
+  Hash, Lock, Sparkles, ArrowUpRight, Menu, X, HelpCircle, UserCircle
 } from "lucide-react";
 import SearchBar from "../components/SearchBar";
+import AdminDashboard from "./AdminDashboard";
+import FeatureGuide from "../components/FeatureGuide";
+import HelpTip from "../components/HelpTip";
 import WalletPinModal from "../components/WalletPinModal";
-import { sendMetaMaskTransaction, getConnectedAccount } from "../services/web3";
+import { payOnChainIfLinked } from "../services/chainPayment";
 import "./Dashboard.css";
 import {
   AuthorOverview,
@@ -28,12 +31,14 @@ import PublisherDashboard from "./PublisherDashboard";
 import ReaderDashboard from "./ReaderDashboard";
 import AdminDashboard from "./AdminDashboard";
 
-const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+import { API_URL } from "../config";
+const BASE_URL = API_URL;
 
 const DashSearchBar = SearchBar;
 
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
 const Sidebar = ({ role, active, setActive, onLogout, user, sidebarOpen, setSidebarOpen }) => {
+  const navigate = useNavigate();
   const authorLinks = [
     { id: "overview",   icon: <BarChart2 size={18} />,    label: "Overview" },
     { id: "mybooks",    icon: <BookOpen size={18} />,      label: "My Books" },
@@ -43,6 +48,7 @@ const Sidebar = ({ role, active, setActive, onLogout, user, sidebarOpen, setSide
     { id: "messages",   icon: <MessageCircle size={18} />, label: "Messages" },
     { id: "analytics",  icon: <TrendingUp size={18} />,    label: "Analytics" },
     { id: "settings",   icon: <Settings size={18} />,      label: "Settings" },
+    { id: "help",       icon: <HelpCircle size={18} />,    label: "Help & Guide" },
   ];
   const readerLinks = [
     { id: "overview", icon: <BarChart2 size={18} />,  label: "Overview" },
@@ -64,7 +70,8 @@ const Sidebar = ({ role, active, setActive, onLogout, user, sidebarOpen, setSide
   ];
 
   const links = role === "author" ? authorLinks : role === "publisher" ? publisherLinks : readerLinks;
-  const roleColor = role === "author" ? "#7c3aed" : role === "publisher" ? "#0369a1" : "#059669";
+  const roleColor = role === "author" ? "var(--accent-600)" : role === "publisher" ? "var(--info)" : "var(--success)";
+  const roleColorBg = role === "author" ? "var(--accent-50)" : role === "publisher" ? "var(--info-bg)" : "var(--success-bg)";
   const roleLabel = role === "author" ? "Author" : role === "publisher" ? "Publisher" : "Reader";
   const [showBalance, setShowBalance] = useState(false);
   const [pinModalOpen, setPinModalOpen] = useState(false);
@@ -85,7 +92,7 @@ const Sidebar = ({ role, active, setActive, onLogout, user, sidebarOpen, setSide
           </div>
           <div className="sidebar-user-info">
             <span className="sidebar-user-name">{user?.name || "User"}</span>
-            <span className="sidebar-role-badge" style={{ background: roleColor + "22", color: roleColor }}>{roleLabel}</span>
+            <span className="sidebar-role-badge" style={{ background: roleColorBg, color: roleColor }}>{roleLabel}</span>
           </div>
         </div>
         <nav className="sidebar-nav">
@@ -94,26 +101,33 @@ const Sidebar = ({ role, active, setActive, onLogout, user, sidebarOpen, setSide
               key={link.id}
               className={`sidebar-link ${active === link.id ? "active" : ""}`}
               onClick={() => { setActive(link.id); setSidebarOpen(false); }}
-              style={active === link.id ? { background: roleColor + "18", color: roleColor, borderColor: roleColor } : {}}
+              style={active === link.id ? { background: roleColorBg, color: roleColor, borderColor: roleColor } : {}}
             >
               {link.icon}<span>{link.label}</span>
               {active === link.id && <ChevronRight size={14} className="link-arrow" />}
             </button>
           ))}
+          <button className="sidebar-link" onClick={() => navigate("/profile")} title="Your profile, MetaMask wallet and payment history">
+            <UserCircle size={18} /><span>Profile & Wallet</span>
+          </button>
         </nav>
         {/* Wallet Balance widget with PIN protection */}
         <div style={{
           margin: "10px 16px",
           padding: "12px 14px",
-          background: `rgba(${role === "author" ? "124, 58, 237" : "3, 105, 161"}, 0.04)`,
-          border: `1px solid rgba(${role === "author" ? "124, 58, 237" : "3, 105, 161"}, 0.12)`,
+          background: roleColorBg,
+          border: `1px solid var(--border-light)`,
           borderRadius: 12,
           display: "flex",
           flexDirection: "column",
           gap: 6
         }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: "bold" }}>Wallet Balance</span>
+            <span style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: "bold" }}>Wallet Balance</span>
+            <HelpTip
+              title="Wallet balance"
+              text="Your in-app money, used to buy books and pay publishing fees. It is hidden by default — click the eye and enter your PIN to see it."
+            />
             <button
               onClick={() => showBalance ? setShowBalance(false) : setPinModalOpen(true)}
               style={{ background: "none", border: "none", color: roleColor, cursor: "pointer", padding: 0 }}
@@ -124,7 +138,7 @@ const Sidebar = ({ role, active, setActive, onLogout, user, sidebarOpen, setSide
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <DollarSign size={14} color={roleColor} />
-            <strong style={{ fontSize: 15, color: "#1e293b", fontFamily: "sans-serif" }}>
+            <strong style={{ fontSize: 15, color: "var(--text-primary)", fontFamily: "var(--font-sans)" }}>
               {showBalance
                 ? `$${(user?.walletBalance !== undefined ? user.walletBalance : 1000).toFixed(2)}`
                 : "$ ••••••"}
@@ -149,10 +163,8 @@ const Sidebar = ({ role, active, setActive, onLogout, user, sidebarOpen, setSide
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-const fmt = (n) => n >= 1000 ? (n / 1000).toFixed(1) + "K" : String(n || 0);
-
 const Skel = () => (
-  <div style={{ height: 52, background: "#f3f0ff", borderRadius: 8, marginBottom: 8, opacity: 0.5 }} />
+  <div style={{ height: 52, background: "var(--gray-100)", borderRadius: 8, marginBottom: 8, opacity: 0.5 }} />
 );
 
 import ChatInterface from "../components/ChatInterface";
@@ -199,38 +211,36 @@ const Dashboard = () => {
     setPayCostPinOpen(true);
   };
 
-  const handlePayCostAfterPin = async () => {
+  const handlePayCostAfterPin = async (pin) => {
     const bookId = payingBookId;
     setPayCostPinOpen(false);
     setPayingBookId(null);
     try {
-      // Find publisher wallet address from book data if available
       const book = books.find(b => (b._id || b.id) === bookId);
-      const publisherWalletAddr =
-        book?.publisher?.blockchainWallet?.address ||
-        book?.publisher?.walletAddress ||
-        "0x0000000000000000000000000000000000000000";
       const publishingCost = book?.publishingCost || 0;
 
-      // Attempt MetaMask transaction (proportional ETH: $1 = 0.0001 ETH)
       let txHash = "";
-      if (publishingCost > 0) {
-        const ethVal = (publishingCost * 0.0001).toFixed(5);
-        try {
-          txHash = await sendMetaMaskTransaction(publisherWalletAddr, ethVal);
-        } catch (metamaskErr) {
-          alert("MetaMask transaction failed: " + metamaskErr.message);
-          return;
-        }
+      try {
+        ({ txHash } = await payOnChainIfLinked({
+          payer: user,
+          receiver: book?.publisher,
+          amountUsd: publishingCost,
+          purpose: "publishing_fee",
+        }));
+      } catch (metamaskErr) {
+        alert("MetaMask transaction failed: " + metamaskErr.message);
+        return;
       }
 
       const { data } = await axios.post(
         `${BASE_URL}/api/manuscripts/${bookId}/pay-cost`,
-        { txHash },
+        { txHash, pin },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (data.success) {
-        alert(`Payment verified on Blockchain ledger${txHash ? " (Tx: " + txHash.slice(0, 12) + "...)" : ""}. Book published successfully!`);
+        const note = data.chainWarning ? `
+(${data.chainWarning})` : "";
+        alert(`Payment complete${txHash ? " (Tx: " + txHash.slice(0, 12) + "...)" : ""}. Book published successfully!${note}`);
         if (data.walletBalance !== undefined) {
           updateUserFields({ walletBalance: data.walletBalance });
         }
@@ -307,9 +317,17 @@ const Dashboard = () => {
     if (active === "settings") {
       return <AuthorSettings user={user} token={token} />;
     }
+    if (active === "help") {
+      return (
+        <FeatureGuide
+          role="author"
+          onGo={(target) => (target.tab ? setActive(target.tab) : navigate(target.path))}
+        />
+      );
+    }
     return (
       <div className="dash-content coming-soon">
-        <Layers size={48} color="#94a3b8" />
+        <Layers size={48} color="var(--gray-400)" />
         <h2>{active}</h2>
         <p>This section is under construction. Check back soon!</p>
       </div>
