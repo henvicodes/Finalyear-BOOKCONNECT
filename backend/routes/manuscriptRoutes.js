@@ -13,8 +13,8 @@ const { checkPin, pinFailureResponse } = require("../utils/pin");
 const AUTHOR_SETTABLE_STATUSES = ["draft", "published", "archived"];
 const { debit, credit, refund, resolveChainProof, parseAmount } = require("../utils/wallet");
 
-// 1. POST /api/manuscripts -> Create manuscript (author only)
-router.post("/", protect, authorize("author"), async (req, res) => {
+// 1. POST /api/manuscripts -> Create manuscript (author or admin)
+router.post("/", protect, authorize("author", "admin"), async (req, res) => {
   try {
     const { title, content, genre, price, publisher, coverImage } = req.body;
     if (!title || !content) {
@@ -43,8 +43,8 @@ router.post("/", protect, authorize("author"), async (req, res) => {
   }
 });
 
-// 2. GET /api/manuscripts -> Get author's manuscripts
-router.get("/", protect, authorize("author"), async (req, res) => {
+// 2. GET /api/manuscripts -> Get author's manuscripts (or all if admin)
+router.get("/", protect, authorize("author", "admin"), async (req, res) => {
   try {
     const manuscripts = await Book.find({ author: req.user._id })
       .populate("publisher", "name email profilePicture blockchainWallet walletAddress")
@@ -115,14 +115,14 @@ router.get("/:id", protect, async (req, res) => {
 });
 
 // 4. PUT /api/manuscripts/:id -> Update manuscript details
-router.put("/:id", protect, authorize("author"), async (req, res) => {
+router.put("/:id", protect, authorize("author", "admin"), async (req, res) => {
   try {
     const manuscript = await Book.findById(req.params.id);
     if (!manuscript) {
       return res.status(404).json({ success: false, message: "Manuscript not found" });
     }
 
-    if (manuscript.author.toString() !== req.user._id.toString()) {
+    if (manuscript.author.toString() !== req.user._id.toString() && req.user.role !== "admin") {
       return res.status(403).json({ success: false, message: "Not authorized" });
     }
 
@@ -167,14 +167,14 @@ router.put("/:id", protect, authorize("author"), async (req, res) => {
 });
 
 // 5. DELETE /api/manuscripts/:id -> Delete manuscript
-router.delete("/:id", protect, authorize("author"), async (req, res) => {
+router.delete("/:id", protect, authorize("author", "admin"), async (req, res) => {
   try {
     const manuscript = await Book.findById(req.params.id);
     if (!manuscript) {
       return res.status(404).json({ success: false, message: "Manuscript not found" });
     }
 
-    if (manuscript.author.toString() !== req.user._id.toString()) {
+    if (manuscript.author.toString() !== req.user._id.toString() && req.user.role !== "admin") {
       return res.status(403).json({ success: false, message: "Not authorized" });
     }
 
@@ -186,14 +186,14 @@ router.delete("/:id", protect, authorize("author"), async (req, res) => {
 });
 
 // 6. POST /api/manuscripts/:id/submit -> Submit to selected publisher
-router.post("/:id/submit", protect, authorize("author"), async (req, res) => {
+router.post("/:id/submit", protect, authorize("author", "admin"), async (req, res) => {
   try {
     const manuscript = await Book.findById(req.params.id);
     if (!manuscript) {
       return res.status(404).json({ success: false, message: "Manuscript not found" });
     }
 
-    if (manuscript.author.toString() !== req.user._id.toString()) {
+    if (manuscript.author.toString() !== req.user._id.toString() && req.user.role !== "admin") {
       return res.status(403).json({ success: false, message: "Not authorized" });
     }
 
@@ -236,7 +236,7 @@ router.post("/:id/submit", protect, authorize("author"), async (req, res) => {
 });
 
 // 7. POST /api/manuscripts/:id/mark-seen -> Publisher marks manuscript as seen
-router.post("/:id/mark-seen", protect, authorize("publisher"), async (req, res) => {
+router.post("/:id/mark-seen", protect, authorize("publisher", "admin"), async (req, res) => {
   try {
     const manuscript = await Book.findById(req.params.id);
     if (!manuscript) {
@@ -268,7 +268,7 @@ router.post("/:id/mark-seen", protect, authorize("publisher"), async (req, res) 
 });
 
 // 8. POST /api/manuscripts/:id/propose-cost -> Publisher proposes publishing cost
-router.post("/:id/propose-cost", protect, authorize("publisher"), async (req, res) => {
+router.post("/:id/propose-cost", protect, authorize("publisher", "admin"), async (req, res) => {
   try {
     const manuscript = await Book.findById(req.params.id);
     if (!manuscript) {
@@ -353,7 +353,7 @@ router.post("/:id/decline", protect, authorize("publisher"), async (req, res) =>
 });
 
 // 9. POST /api/manuscripts/:id/pay-cost -> Author pays publishing fee
-router.post("/:id/pay-cost", protect, authorize("author"), async (req, res) => {
+router.post("/:id/pay-cost", protect, authorize("author", "admin"), async (req, res) => {
   try {
     const manuscript = await Book.findById(req.params.id);
     if (!manuscript) {

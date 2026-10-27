@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Mail, Clock, AlertCircle, RefreshCw } from "lucide-react";
 import "../styles/OTPVerification.css";
 
-const OTPVerification = ({ email, onVerify, onResend, onCancel }) => {
+const OTPVerification = ({ email, onVerify, onResend, onCancel, devOtp }) => {
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [timer, setTimer] = useState(600); // 10 minutes in seconds
   const [canResend, setCanResend] = useState(false);
@@ -90,6 +90,14 @@ const OTPVerification = ({ email, onVerify, onResend, onCancel }) => {
     }
   };
 
+  const handleAutoFill = () => {
+    if (!devOtp) return;
+    const digits = devOtp.toString().slice(0, 6).split("");
+    while (digits.length < 6) digits.push("");
+    setOtp(digits);
+    setError("");
+  };
+
   return (
     <div className="otp-verification-overlay">
       <div className="otp-verification-modal">
@@ -104,6 +112,55 @@ const OTPVerification = ({ email, onVerify, onResend, onCancel }) => {
             <strong>{email}</strong>
           </p>
         </div>
+
+        {devOtp && (
+          <div
+            style={{
+              background: "#eff6ff",
+              border: "1px dashed #3b82f6",
+              borderRadius: "8px",
+              padding: "10px 14px",
+              margin: "12px 0 16px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              fontSize: "13px",
+              color: "#1d4ed8",
+            }}
+          >
+            <span>
+              <strong>OTP Code:</strong>{" "}
+              <code
+                style={{
+                  background: "#dbeafe",
+                  padding: "2px 6px",
+                  borderRadius: "4px",
+                  fontWeight: "bold",
+                  fontSize: "14px",
+                  letterSpacing: "1px",
+                }}
+              >
+                {devOtp}
+              </code>
+            </span>
+            <button
+              type="button"
+              onClick={handleAutoFill}
+              style={{
+                background: "#2563eb",
+                color: "#ffffff",
+                border: "none",
+                borderRadius: "5px",
+                padding: "4px 10px",
+                cursor: "pointer",
+                fontSize: "12px",
+                fontWeight: "500",
+              }}
+            >
+              Auto-fill
+            </button>
+          </div>
+        )}
 
         {error && (
           <div className="otp-error">

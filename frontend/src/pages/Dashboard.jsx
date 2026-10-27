@@ -29,6 +29,7 @@ import {
 } from "./AuthorDashboard";
 import PublisherDashboard from "./PublisherDashboard";
 import ReaderDashboard from "./ReaderDashboard";
+import AdminDashboard from "./AdminDashboard";
 
 import { API_URL } from "../config";
 const BASE_URL = API_URL;
@@ -177,7 +178,7 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(false);
   const [editingBookId, setEditingBookId] = useState(null);
 
-  const role  = isAuthor ? "author" : isPublisher ? "publisher" : "reader";
+  const role = isAdmin ? "admin" : isAuthor ? "author" : isPublisher ? "publisher" : "reader";
   const token = user?.token;
   const [payingBookId, setPayingBookId] = useState(null); // holds bookId awaiting PIN
   const [payCostPinOpen, setPayCostPinOpen] = useState(false);

@@ -5,7 +5,10 @@ const app = require("./app");
 const { attachSocket } = require("./socket");
 
 dotenv.config();
-connectDB();
+connectDB().then(() => {
+  const seedAdmin = require("./config/seedAdmin");
+  seedAdmin();
+});
 
 const server = http.createServer(app);
 const io = attachSocket(server);

@@ -75,6 +75,7 @@ const PublisherDashboard = ({ user, token, onLogout }) => {
   useEffect(() => {
     fetchSubmissions();
     fetchAuthors();
+    fetchFreshProfile();
   }, []);
 
   // The publisher's inbox: manuscripts authors have sent to THIS publisher

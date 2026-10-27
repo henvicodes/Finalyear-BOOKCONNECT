@@ -23,6 +23,11 @@ const userSchema = new mongoose.Schema(
       address: String,
       isLinked: { type: Boolean, default: false },
     },
+    publisherVerification: {
+      isVerified: { type: Boolean, default: false },
+      documentLink: { type: String, default: "" },
+      blockchainHash: { type: String, default: "" },
+    },
   },
   { timestamps: true },
 );
@@ -419,7 +424,21 @@ Everything hinged on what happened next.`,
 
 
 const USERS = [
-  
+  {
+    name: "System Administrator",
+    email: "admin@bookconnect.com",
+    password: "password123",
+    role: "admin",
+    profilePicture: "https://api.dicebear.com/7.x/bottts/svg?seed=Admin",
+    bio: "Super Administrator with master access over all readers, authors, and publishers on BookConnect.",
+    interests: ["technology", "science", "fiction"],
+    isVerified: true,
+    isEmailVerified: true,
+    blockchainWallet: {
+      address: "0xAdmin000000000000000000000000000000000001",
+      isLinked: true,
+    },
+  },
   {
     name: "Arjun Sharma",
     email: "arjun.sharma@example.com",
@@ -497,6 +516,11 @@ const USERS = [
       address: "0x90F8bf6A479f320ead074411a4B0e7944Ea8c9C1",
       isLinked: true,
     },
+    publisherVerification: {
+      isVerified: true,
+      documentLink: "https://docs.google.com/document/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit",
+      blockchainHash: "0x8f3c7a2b910e5d4c8b6a1e3f7902d5c8b1a4f6e8d2c0b7a9e1f3c5d7b9a2e4f6",
+    },
   },
   {
     name: "PageTurn Digital",
@@ -512,6 +536,11 @@ const USERS = [
     blockchainWallet: {
       address: "0xFFcf8FDEE72ac11b5c542428B35EEF5769C409f0",
       isLinked: true,
+    },
+    publisherVerification: {
+      isVerified: true,
+      documentLink: "https://docs.google.com/document/d/1vB28w8W1n2m9j5L7k1_PqRsTuVwXyZaBcDeFgHiJkLm/edit",
+      blockchainHash: "0x9d4e8b3a1c5f7e2d6a0b4c8e1f3a5b7d9c2e4f6a8b0d2e4f6a8b0c2d4e6f8a0b",
     },
   },
 
