@@ -84,8 +84,7 @@ const sendRegistrationOTP = async (req, res) => {
     // Send OTP via email
     let emailSent = false;
     try {
-      await sendOTPEmail(email, name, otp);
-      emailSent = true;
+      await emailService.sendOTPEmail(email, name, otp);
       console.log("OTP email sent successfully");
     } catch (emailError) {
       console.error("OTP email failed:", emailError.message);
@@ -257,9 +256,7 @@ const resendOTP = async (req, res) => {
     // Send new OTP via email
     let emailSent = false;
     try {
-      await sendOTPEmail(email, user.name, otp);
-      emailSent = true;
-      console.log("OTP email resent successfully");
+      await emailService.sendOTPEmail(email, user.name, otp);
     } catch (emailError) {
       console.error("OTP email failed:", emailError.message);
       if (emailFailed(res, email, otp, "verification (resend)")) return;

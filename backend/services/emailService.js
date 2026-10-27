@@ -1,24 +1,27 @@
 const nodemailer = require("nodemailer");
 
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-  // timeout settings
-  connectionTimeout: 10000,
-  greetingTimeout: 10000,
-  socketTimeout: 10000,
-});
+// Two ways to send mail:
+//  - Brevo's HTTPS API (set BREVO_API_KEY). Use this on hosts that block SMTP
+//    ports, which includes most free hosting (e.g. Render's free web services).
+//  - Gmail over SMTP (EMAIL_USER + EMAIL_PASS), fine on a normal computer.
+const BREVO_URL = "https://api.brevo.com/v3/smtp/email";
 
-// Verify connection configuration
-transporter.verify(function (error, success) {
-  if (error) {
-    console.log("Email server notice:", error.message || error);
-    console.log("👉 Tip: For Gmail SMTP, generate a 16-character App Password at https://myaccount.google.com/apppasswords and set EMAIL_PASS in backend/.env.");
-  } else {
-    console.log("Email server is ready to send messages");
+const useBrevo = () => !!process.env.BREVO_API_KEY;
+
+let transporter = null;
+const getTransporter = () => {
+  if (!transporter) {
+    transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+      // timeout settings
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 10000,
+    });
   }
   return transporter;
 };

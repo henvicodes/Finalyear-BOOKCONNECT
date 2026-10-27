@@ -158,8 +158,8 @@ const LoginPage = () => {
                 setFormData({
                   email: "submissions@vikramhouse.com",
                   password: "password123",
-                });
-              }}
+                })
+              }
               className="btn-demo"
             >
               Publisher Demo

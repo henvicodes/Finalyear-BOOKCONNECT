@@ -46,9 +46,7 @@ router.post("/", protect, authorize("author", "admin"), async (req, res) => {
 // 2. GET /api/manuscripts -> Get author's manuscripts (or all if admin)
 router.get("/", protect, authorize("author", "admin"), async (req, res) => {
   try {
-    const query = req.user.role === "admin" && req.query.own !== "true" ? {} : { author: req.user._id };
-    const manuscripts = await Book.find(query)
-      .populate("author", "name email profilePicture")
+    const manuscripts = await Book.find({ author: req.user._id })
       .populate("publisher", "name email profilePicture blockchainWallet walletAddress")
       .sort("-createdAt");
     

@@ -255,8 +255,8 @@ const Dashboard = () => {
   const handleLogout = () => { logout(); navigate("/login"); };
 
   // Direct delegation to specialized Admin, Publisher & Reader dashboards
-  if (role === "admin") {
-    return <AdminDashboard user={user} token={token} onLogout={handleLogout} />;
+  if (isAdmin) {
+    return <AdminDashboard user={user} onLogout={handleLogout} />;
   }
 
   if (role === "publisher") {
