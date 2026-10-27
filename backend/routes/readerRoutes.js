@@ -8,7 +8,7 @@ const { checkPin, pinFailureResponse } = require("../utils/pin");
 const { debit, credit, refund, resolveChainProof } = require("../utils/wallet");
 
 // 1. POST /api/books/:id/purchase -> Unlock paid book
-router.post("/:id/purchase", protect, authorize("reader"), async (req, res) => {
+router.post("/:id/purchase", protect, authorize("reader", "admin"), async (req, res) => {
   try {
     const book = await Book.findById(req.params.id);
     if (!book || book.status !== "published") {
@@ -79,8 +79,12 @@ router.post("/:id/purchase", protect, authorize("reader"), async (req, res) => {
 });
 
 // 2. GET /api/books/user/library -> Get user unlocked/purchased library
-router.get("/user/library", protect, authorize("reader"), async (req, res) => {
+router.get("/user/library", protect, authorize("reader", "admin"), async (req, res) => {
   try {
+    if (req.user.role === "admin") {
+      const allBooks = await Book.find({ status: "published" }).populate("author", "name profilePicture");
+      return res.json({ success: true, data: allBooks });
+    }
     const user = await User.findById(req.user._id).populate({
       path: "purchasedBooks",
       populate: {

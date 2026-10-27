@@ -153,7 +153,20 @@ const LoginPage = () => {
               Author Demo
             </button>
             <button
-              onClick={() =>
+              type="button"
+              onClick={() => {
+                setFormData({
+                  email: "submissions@vikramhouse.com",
+                  password: "password123",
+                });
+              }}
+              className="btn-demo"
+            >
+              Publisher Demo
+            </button>
+            <button
+              type="button"
+              onClick={() => {
                 setFormData({
                   email: "reader@example.com",
                   password: "password123",

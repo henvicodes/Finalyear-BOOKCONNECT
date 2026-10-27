@@ -82,8 +82,10 @@ const sendRegistrationOTP = async (req, res) => {
     }
 
     // Send OTP via email
+    let emailSent = false;
     try {
-      await emailService.sendOTPEmail(email, name, otp);
+      await sendOTPEmail(email, name, otp);
+      emailSent = true;
       console.log("OTP email sent successfully");
     } catch (emailError) {
       console.error("OTP email failed:", emailError.message);
@@ -92,10 +94,12 @@ const sendRegistrationOTP = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: "OTP sent successfully",
+      message: emailSent ? "OTP sent successfully" : "OTP generated successfully",
       data: {
         email,
         expiresIn: "10 minutes",
+        devOtp: process.env.NODE_ENV === "development" || !emailSent ? otp : undefined,
+        emailSent,
       },
     });
   } catch (error) {
@@ -251,8 +255,11 @@ const resendOTP = async (req, res) => {
     await user.save();
 
     // Send new OTP via email
+    let emailSent = false;
     try {
-      await emailService.sendOTPEmail(email, user.name, otp);
+      await sendOTPEmail(email, user.name, otp);
+      emailSent = true;
+      console.log("OTP email resent successfully");
     } catch (emailError) {
       console.error("OTP email failed:", emailError.message);
       if (emailFailed(res, email, otp, "verification (resend)")) return;
@@ -260,10 +267,12 @@ const resendOTP = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: "OTP resent successfully",
+      message: emailSent ? "OTP resent successfully" : "OTP regenerated successfully",
       data: {
         email,
         expiresIn: "10 minutes",
+        devOtp: process.env.NODE_ENV === "development" || !emailSent ? otp : undefined,
+        emailSent,
       },
     });
   } catch (error) {
@@ -332,6 +341,8 @@ const loginUser = async (req, res) => {
         role: user.role,
         profilePicture: user.profilePicture,
         isVerified: user.isVerified,
+        blockchainWallet: user.blockchainWallet,
+        publisherVerification: user.publisherVerification,
         walletBalance: user.walletBalance,
         earnings: user.earnings,
         token: sessionToken,
@@ -363,6 +374,7 @@ const getUserProfile = async (req, res) => {
         isVerified: user.isVerified || !!user.publisherVerification?.isVerified,
         publisherVerificationStatus: user.role === "publisher" ? (user.publisherVerification?.status || "none") : undefined,
         blockchainWallet: user.blockchainWallet,
+        publisherVerification: user.publisherVerification,
         walletBalance: user.walletBalance,
         earnings: user.earnings,
         createdAt: user.createdAt,
@@ -390,6 +402,16 @@ const updateUserProfile = async (req, res) => {
         user.profilePicture = req.body.profilePicture;
       }
 
+      if (req.body.publisherVerification) {
+        user.publisherVerification = {
+          ...user.publisherVerification,
+          ...req.body.publisherVerification,
+        };
+        if (req.body.publisherVerification.isVerified) {
+          user.isVerified = true;
+        }
+      }
+
       const updatedUser = await user.save();
 
       res.json({
@@ -403,6 +425,8 @@ const updateUserProfile = async (req, res) => {
           bio: updatedUser.bio,
           interests: updatedUser.interests,
           isVerified: updatedUser.isVerified,
+          blockchainWallet: updatedUser.blockchainWallet,
+          publisherVerification: updatedUser.publisherVerification,
         },
       });
     } else {
